@@ -856,13 +856,37 @@
       });
     }
 
+    /* ================= État réel des appareils (option status, setStatus) =================
+       Sans carte d'état, la baie vit sa vie (voyants animés). Dès qu'une carte est donnée, chaque appareil affiche
+       son état : 'up' (activité normale), 'down' (rouge fixe), 'degraded' (orange fixe), 'unknown' (éteint, gris).
+       Un appareil absent de la carte est 'unknown' : jamais de vert sans donnée. */
+    var DEVICES = ['fw', 'switch', 'server', 'nas', 'isp', 'mini', 'ups'];
+    var STATUS = null;
+    function setStatus(map) {
+      STATUS = {};
+      DEVICES.forEach(function (d) { var s = map && map[d]; STATUS[d] = s === 'up' || s === 'down' || s === 'degraded' ? s : 'unknown'; });
+    }
+    if (opt.status) setStatus(opt.status);
+    function statusOf(dev) { return STATUS ? STATUS[dev] : 'up'; }
+    function ledDevice(l) {
+      if (l.kind === 'port') return 'switch';
+      if (l.kind === 'power' || l.kind === 'disk') return 'server';
+      if (l.kind === 'sys') return l.i < 2 ? 'server' : 'nas';
+      return l.kind;                                                // fw, nas, isp, mini, ups
+    }
+    var LED_DOWN = '#ef4444', LED_DEGRADED = '#f97316', LED_UNKNOWN = '#3a3f47';
+
     function drawLeds(st) {
       var t = st.t;
       LEDS.forEach(function (l) {
         if (st.power <= l.thr) return;
-        var col;
+        var col, s = statusOf(ledDevice(l));
+        if (l.kind === 'port' && !st.halting && hash(l.i, 3) < 0.25) return;   // ports libres : pas de voyant
         if (st.halting) col = '#ef4444';
-        else if (l.kind === 'port') { if (hash(l.i, 3) < 0.25) return; col = hash(l.i, Math.floor(t / 90) + l.i) > 0.72 ? '#f2b33d' : '#3ddc84'; }
+        else if (s === 'down') col = LED_DOWN;
+        else if (s === 'degraded') col = LED_DEGRADED;
+        else if (s === 'unknown') col = LED_UNKNOWN;
+        else if (l.kind === 'port') col = hash(l.i, Math.floor(t / 90) + l.i) > 0.72 ? '#f2b33d' : '#3ddc84';
         else if (l.kind === 'fw') col = l.i === 0 || hash(l.i, Math.floor(t / 160)) > 0.5 ? '#3ddc84' : '#1d5c36';
         else if (l.kind === 'power') col = '#5aa9ff';
         else if (l.kind === 'disk') col = hash(l.i, Math.floor(t / 110)) > 0.62 ? '#5aa9ff' : '#3ddc84';
@@ -873,16 +897,47 @@
         px(P(l.x, l.y !== undefined ? l.y : YE - 0.02, l.z), col, Math.max(1, Math.round(K / 6)));
       });
       var f0 = U(1) + 0.49, f1 = U(1) + 2 * UH - 0.49;
-      if (st.power > 0.3 && !st.halting) {                         // écran de l'onduleur
-        qY(YE - 0.02, 6.05, 9.15, f0, f1, '#0f3b5e');
-        var bars = 3 + Math.round(1.5 + 1.5 * Math.sin(t / 900));
-        for (var b = 0; b < 7; b++) qY(YE - 0.03, 6.3 + b * 0.38, 6.55 + b * 0.38, f0 + 0.15, f1 - 0.15, b < bars ? '#86d4ff' : '#1d5478');
+      var sUps = statusOf('ups'), sFw = statusOf('fw');
+      if (st.power > 0.3 && !st.halting && sUps !== 'unknown') {   // écran de l'onduleur
+        if (sUps === 'down') qY(YE - 0.02, 6.05, 9.15, f0, f1, '#3b0f12');
+        else {
+          qY(YE - 0.02, 6.05, 9.15, f0, f1, '#0f3b5e');
+          var bars = 3 + Math.round(1.5 + 1.5 * Math.sin(t / 900));
+          for (var b = 0; b < 7; b++) qY(YE - 0.03, 6.3 + b * 0.38, 6.55 + b * 0.38, f0 + 0.15, f1 - 0.15, b < bars ? (sUps === 'degraded' ? LED_DEGRADED : '#86d4ff') : '#1d5478');
+        }
       }
-      if (st.power > 0.5 && !st.halting) {                         // écran du pare-feu
-        var z9 = U(9) + 0.25;
-        for (var k = 0; k < 5; k++) if (hash(k, Math.floor(t / 300)) > 0.3) px(P(8.0 + k * 0.42, YE - 0.02, z9 + 0.2), '#3ddc84', 1);
+      if (st.power > 0.5 && !st.halting && sFw !== 'unknown') {    // écran du pare-feu
+        var z9 = U(9) + 0.25, fwCol = sFw === 'down' ? LED_DOWN : sFw === 'degraded' ? LED_DEGRADED : '#3ddc84';
+        for (var k = 0; k < 5; k++) if (sFw === 'down' || hash(k, Math.floor(t / 300)) > 0.3) px(P(8.0 + k * 0.42, YE - 0.02, z9 + 0.2), fwCol, 1);
       }
       if (st.power > 0.2) glow(10, -7, 0.5, 46, 'rgba(70,190,255,' + (0.05 * Math.min(1, st.power)).toFixed(3) + ')');
+    }
+
+    /* ---------- Texte en police pixel 3x5 sur l'écran du bureau (setScreenText) ---------- */
+    var FONT = {
+      '0': '111101101101111', '1': '010110010010111', '2': '111001111100111', '3': '111001111001111', '4': '101101111001001',
+      '5': '111100111001111', '6': '111100111101111', '7': '111001001001001', '8': '111101111101111', '9': '111101111001111',
+      A: '010101111101101', B: '110101110101110', C: '011100100100011', D: '110101101101110', E: '111100110100111',
+      F: '111100110100100', G: '011100101101011', H: '101101111101101', I: '111010010010111', J: '001001001101010',
+      K: '101101110101101', L: '100100100100111', M: '101111111101101', N: '110101101101101', O: '010101101101010',
+      P: '111101111100100', Q: '010101101110011', R: '111101110101101', S: '011100010001110', T: '111010010010010',
+      U: '101101101101111', V: '101101101101010', W: '101101111111101', X: '101101010101101', Y: '101101010010010',
+      Z: '111001010100111', '/': '001001010100100', '?': '110001010000010', ':': '000010000010000', '.': '000000000000010', ' ': '000000000000000'
+    };
+    var SCREEN = null;
+    function setScreenText(text, color) {
+      if (!text) { SCREEN = null; return; }
+      var s = String(text).toUpperCase();
+      if (s.normalize) s = s.normalize('NFD').replace(/[̀-ͯ]/g, '');   // É -> E
+      SCREEN = { text: s.slice(0, 11), color: color || '#3ddc84' };
+    }
+    if (opt.screenText) setScreenText(opt.screenText, opt.screenColor);
+    function drawScreenText(X) {
+      var e = Math.max(1, Math.round(K / 4)), u = e / K;            // un pixel de police = e pixels écran
+      for (var c = 0; c < SCREEN.text.length; c++) {
+        var gl = FONT[SCREEN.text[c]] || FONT['?'];
+        for (var k = 0; k < 15; k++) if (gl[k] === '1') px(P(X, 11.0 - (c * 4 + k % 3) * u, 19.55 - Math.floor(k / 3) * u), SCREEN.color, e);
+      }
     }
 
     function drawMonitor(st) {
@@ -915,7 +970,8 @@
         var y0 = 5.2 - b * 0.85, hg = 0.4 + 1.6 * (0.5 + 0.5 * Math.sin(t / 700 + b * 1.3));
         qX(X + 0.01, y0 - 0.55, y0, 20.0, 20.0 + hg, '#5aa9ff');
       }
-      for (var l = 0; l < 3; l++) {
+      if (SCREEN && st.screen !== 'typing') drawScreenText(X + 0.01);  // texte imposé (setScreenText) à la place des lignes de log
+      else for (var l = 0; l < 3; l++) {
         var len = 2 + ((Math.floor(t / 400) + l * 5) % 6);
         var zl = 19.15 - l * 0.55;
         if (st.screen === 'typing' && l === 2) { len = Math.min(10.5, st.typed * 10.5); qX(X + 0.01, 11.0 - len, 11.0, zl, zl + 0.3, '#f2b33d'); }
@@ -2469,7 +2525,7 @@
     }
 
     var api = { frame: frame, duration: TOTAL, start: start, pause: pause, resume: resume, isPaused: function () { return paused; },
-      canvas: cv, state: null, setWeather: setWeather, pointer: pointer, pointerLeave: pointerLeave,
+      canvas: cv, state: null, setWeather: setWeather, setStatus: setStatus, setScreenText: setScreenText, pointer: pointer, pointerLeave: pointerLeave,
       toggleLaser: toggleLaser, set: function (k, v) { opt[k] = v; } };
     if (opt.autoplay !== false) {
       var reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

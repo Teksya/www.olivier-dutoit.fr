@@ -37,7 +37,7 @@ Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce q
 | --- | --- | --- |
 | 1. Socle | Tailwind v4 compilé, GSAP servi en local | ✅ |
 | 2. Une seule page | Tout le site en chapitres, header en index, redirections des anciennes pages | ✅ |
-| 3. Hero homelab | Scène pixel art en hero (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) | ✅ intégration, ⏳ vraies données |
+| 3. Hero homelab | Scène pixel art en hero (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) | ✅ intégration, ✅ vraies données, ⏳ interactions |
 | 4. Ce site | Le trajet d'une requête, du visiteur au container Express | ⏳ |
 
 ## 🛠️ Lancer en local
@@ -111,6 +111,40 @@ Le haut de l'accueil montre mon bureau et ma baie en pixel art, avec Blue, ma ch
 - **Mobile** : cadrage vertical sur la baie et l'arbre à chat, sans les activités hors champ. Un tap caresse Blue, un appui long allume le laser.
 - **Pause** : bouton en haut à droite, mémorisé dans le navigateur.
 
+### 🟢 Les vrais états du homelab
+
+Les voyants de la baie reflètent la status page Uptime Kuma, via `GET /api/homelab` (rafraîchi toutes les 60 s) :
+
+| Champ | Contenu |
+| --- | --- |
+| `global` | `up`, `degraded`, `down` ou `unknown` (Kuma injoignable), calculé sur tous les groupes de la status page |
+| `groups` | Un élément par groupe configuré : nom public, appareil, état, latence max en ms |
+| `devices` | État par appareil de la baie (le pire des groupes qui lui sont associés) |
+| `time` | Heure de Paris |
+| `weather` | Code météo WMO d'Open-Meteo pour Saint-Étienne (cache 20 min, côté serveur) |
+| `theme` | Thème saisonnier actif (`halloween`, `noel`) ou `null` |
+
+Ni IP, ni port, ni hostname, ni URL de monitor : seulement des noms publics et des états.
+
+La correspondance se règle dans [config/homelab-scene.json](config/homelab-scene.json) (relu au démarrage du serveur) :
+
+```json
+{
+  "seuilLatenceMs": 500,
+  "groupes": {
+    "Nom du groupe dans Kuma": { "appareil": "nas", "nomPublic": "Stockage" }
+  },
+  "meteo": { "latitude": 45.4397, "longitude": 4.3872 },
+  "themes": [{ "nom": "halloween", "du": "10-20", "au": "11-02" }]
+}
+```
+
+- **Appareils** : `fw` (pare-feu), `switch`, `server` (serveur 2U), `nas`, `isp` (box internet), `mini` (mini PC), `ups` (onduleur).
+- **États** : `up` (voyants animés), `degraded` (orange fixe : groupe en ligne mais latence au-dessus de `seuilLatenceMs`), `down` (rouge fixe), `unknown` (éteints). Un appareil sans groupe associé reste éteint : jamais de vert sans donnée.
+- **Ajouter un service** : crée le monitor dans Kuma et place-le dans un groupe de la status page publique. Si ce groupe est déjà dans `groupes`, il compte tout de suite ; sinon ajoute le groupe avec son appareil et son nom public, puis redémarre le serveur.
+- **Écran du bureau** : `OK n/m`, `DEGRADE`, `PANNE n/m` ou `INCONNU`.
+- La validation est faite par `validateHomelabSceneConfig()` dans `server.js`, réutilisable par une future page d'admin avant d'écrire le fichier.
+
 ## 🗂️ Structure du projet
 
 ```text
@@ -118,6 +152,7 @@ Le haut de l'accueil montre mon bureau et ma baie en pixel art, avec Blue, ma ch
 ├── server.js             Le serveur Express : pages, API, admin
 ├── scripts/vendor-cat.js Copie du moteur de la scène pixel art (npm run vendor:cat)
 ├── vendor/cat-scene/     Moteur et affiches du hero (commités)
+├── config/homelab-scene.json  Groupes Kuma -> appareils de la baie, météo, thèmes
 ├── manage-projects.js    Gestion des projets en ligne de commande
 ├── projects.json         Les projets du chapitre Projets
 ├── src/css/app.css       Source Tailwind (tokens dans @theme, composants)

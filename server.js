@@ -435,6 +435,130 @@ app.get('/api/uptime', async (req, res) => {
 	res.json({ ok: true, overall: snapshot.groups.every((g) => g.up), groups: snapshot.groups });
 });
 
+/* ── Scène du hero : état réel du homelab ─────────────────────────────
+   config/homelab-scene.json associe chaque groupe Kuma à un appareil de la baie et à un nom public.
+   Lecture et validation regroupées ici, pour qu'une future page d'admin puisse réutiliser
+   validateHomelabSceneConfig() avant d'écrire le fichier. */
+const homelabScenePath = path.join(__dirname, 'config', 'homelab-scene.json');
+const SCENE_DEVICES = ['fw', 'switch', 'server', 'nas', 'isp', 'mini', 'ups'];
+const STATUS_RANK = { up: 0, unknown: 1, degraded: 2, down: 3 };   // le pire état l'emporte
+
+function validateHomelabSceneConfig(raw) {
+	const cfg = raw && typeof raw === 'object' ? raw : {};
+	const groupes = {};
+	Object.keys(cfg.groupes || {}).forEach((kuma) => {
+		const g = cfg.groupes[kuma] || {};
+		if (!SCENE_DEVICES.includes(g.appareil)) {
+			console.warn(`homelab-scene : appareil inconnu pour le groupe "${kuma}" (${g.appareil}), ignoré`);
+			return;
+		}
+		groupes[kuma] = { appareil: g.appareil, nomPublic: String(g.nomPublic || g.appareil).trim() };
+	});
+	const meteo = cfg.meteo || {};
+	return {
+		seuilLatenceMs: Number(cfg.seuilLatenceMs) > 0 ? Number(cfg.seuilLatenceMs) : 500,
+		groupes,
+		meteo: Number.isFinite(meteo.latitude) && Number.isFinite(meteo.longitude) ? { latitude: meteo.latitude, longitude: meteo.longitude } : null,
+		themes: (Array.isArray(cfg.themes) ? cfg.themes : []).filter((t) => t && /^\d\d-\d\d$/.test(t.du) && /^\d\d-\d\d$/.test(t.au) && t.nom)
+	};
+}
+
+function loadHomelabSceneConfig() {
+	try {
+		return validateHomelabSceneConfig(JSON.parse(fs.readFileSync(homelabScenePath, 'utf8')));
+	} catch (e) {
+		console.error('homelab-scene : configuration illisible :', e.message);
+		return validateHomelabSceneConfig({});
+	}
+}
+
+let homelabScene = loadHomelabSceneConfig();
+
+// Date et heure de Paris (le homelab est à Saint-Étienne)
+function parisNow() {
+	const parts = {};
+	new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+		.formatToParts(new Date()).forEach((p) => { parts[p.type] = p.value; });
+	return { monthDay: `${parts.month}-${parts.day}`, hour: Number(parts.hour), minute: Number(parts.minute), hhmm: `${parts.hour}:${parts.minute}` };
+}
+
+// Thème saisonnier actif (plages MM-JJ, une plage peut passer le nouvel an)
+function activeTheme(monthDay) {
+	const t = homelabScene.themes.find((th) => (th.du <= th.au ? monthDay >= th.du && monthDay <= th.au : monthDay >= th.du || monthDay <= th.au));
+	return t ? t.nom : null;
+}
+
+// Météo actuelle (code WMO) via Open-Meteo, côté serveur, cache 20 min ; en cas d'échec on garde la dernière valeur
+let weatherCache = { code: null, at: 0 };
+function getWeatherCode() {
+	const m = homelabScene.meteo;
+	if (!m) return Promise.resolve(null);
+	if (Date.now() - weatherCache.at < 20 * 60000) return Promise.resolve(weatherCache.code);
+	return new Promise((resolve) => {
+		const req = https.get({
+			hostname: 'api.open-meteo.com',
+			path: `/v1/forecast?latitude=${m.latitude}&longitude=${m.longitude}&current=weather_code`,
+			headers: { 'User-Agent': 'olivier-dutoit.fr' }
+		}, (r) => {
+			let d = '';
+			r.on('data', (c) => d += c);
+			r.on('end', () => {
+				try {
+					const code = JSON.parse(d).current.weather_code;
+					if (Number.isFinite(code)) weatherCache = { code, at: Date.now() };
+				} catch (e) {
+					console.error('Open-Meteo :', e.message);
+				}
+				resolve(weatherCache.code);
+			});
+		});
+		req.setTimeout(5000, () => req.destroy(new Error('timeout')));
+		req.on('error', (e) => { console.error('Open-Meteo :', e.message); resolve(weatherCache.code); });
+	});
+}
+
+// État par groupe configuré, par appareil et global. Kuma injoignable : tout est "unknown".
+function buildHomelabState(snapshot) {
+	const worst = (a, b) => (STATUS_RANK[b] > STATUS_RANK[a] ? b : a);
+	const seuil = homelabScene.seuilLatenceMs;
+	const groupStatus = (name) => {
+		if (!snapshot) return { status: 'unknown', latency: null };
+		const g = snapshot.groups.find((x) => x.group === name);
+		if (!g) return { status: 'unknown', latency: null };
+		const lat = snapshot.services.filter((s) => s.group === name && s.latency !== null).map((s) => s.latency);
+		const latency = lat.length ? Math.max(...lat) : null;
+		return { status: !g.up ? 'down' : latency !== null && latency > seuil ? 'degraded' : 'up', latency };
+	};
+
+	const devices = {};
+	const groups = Object.keys(homelabScene.groupes).map((kuma) => {
+		const map = homelabScene.groupes[kuma], st = groupStatus(kuma);
+		devices[map.appareil] = devices[map.appareil] ? worst(devices[map.appareil], st.status) : st.status;
+		return { name: map.nomPublic, device: map.appareil, status: st.status, latency: st.latency };
+	});
+
+	let global = 'unknown';
+	if (snapshot) global = snapshot.groups.map((g) => groupStatus(g.group).status).reduce(worst, 'up');
+	return { global, groups, devices };
+}
+
+// Pas d'IP, de port, de hostname ni d'URL : seulement des noms publics et des états
+app.get('/api/homelab', async (req, res) => {
+	const [snapshot, weather] = await Promise.all([getHomelabSnapshot(), getWeatherCode()]);
+	const now = parisNow();
+	const state = buildHomelabState(snapshot);
+	res.set('Cache-Control', 'no-store');
+	res.json({
+		ok: true,
+		global: state.global,
+		groups: state.groups,
+		devices: state.devices,
+		time: { zone: 'Europe/Paris', hhmm: now.hhmm, hour: now.hour + now.minute / 60 },
+		weather,
+		theme: activeTheme(now.monthDay)
+	});
+});
+
 
 async function getSpotifyToken() {
 	const tokenKey = `${spotifyConfig.SPOTIFY_CLIENT_ID}:${spotifyConfig.SPOTIFY_REFRESH_TOKEN}`;
@@ -798,16 +922,11 @@ const CONTACT_MESSAGES = {
 	'send-failed': { type: 'error', text: 'Impossible d\'envoyer l\'email.' }
 };
 
-// Heure de Paris (le homelab est à Saint-Étienne) : choisit l'affiche jour ou nuit du hero
-function parisHour() {
-	const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', hour: 'numeric', hourCycle: 'h23' }).formatToParts(new Date());
-	return Number(parts.find((p) => p.type === 'hour').value);
-}
-
+// Affiche jour ou nuit du hero selon l'heure de Paris
 function isDaytime(hour) { return hour >= 8 && hour < 19; }
 
 app.get('/', (req, res) => res.render('index', {
-	heroPoster: isDaytime(parisHour()) ? 'portfolio-jour.png' : 'portfolio-nuit.png',
+	heroPoster: isDaytime(parisNow().hour) ? 'portfolio-jour.png' : 'portfolio-nuit.png',
 	title: 'Olivier D - Accueil',
 	description: 'Étudiant en BTS SIO SISR en alternance, passionné par les réseaux, l\'administration système et le développement web. Projets, parcours et contact.',
 	url: 'https://www.olivier-dutoit.fr',

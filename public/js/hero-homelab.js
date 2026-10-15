@@ -105,9 +105,54 @@
     pauseLabel.textContent = paused ? 'Lecture' : 'Pause';
   }
 
+  // ── Vraies données (/api/homelab) ──────────────────────────
+  // Sans réponse, tout reste "unknown" : voyants éteints, jamais de vert inventé.
+  var REFRESH_MS = 60000;
+  var SCREEN = {
+    up: { text: 'OK', color: '#3ddc84' },
+    degraded: { text: 'DEGRADE', color: '#f97316' },
+    down: { text: 'PANNE', color: '#ef4444' },
+    unknown: { text: 'INCONNU', color: '#86868b' }
+  };
+  var homelab = null;
+
+  function fetchHomelab(done) {
+    if (!window.fetch) return done(null);
+    fetch('/api/homelab', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { done(d && d.ok ? d : null); })
+      .catch(function () { done(null); });
+  }
+
+  // Texte de l'écran du bureau : état global, avec le nombre de services en ligne quand on le connaît
+  function screenOf(d) {
+    var g = d ? d.global : 'unknown', s = SCREEN[g] || SCREEN.unknown, text = s.text;
+    if (d && d.groups && d.groups.length && (g === 'up' || g === 'down')) {
+      var up = d.groups.filter(function (x) { return x.status === 'up'; }).length;
+      text += ' ' + up + '/' + d.groups.length;
+    }
+    return { text: text, color: s.color };
+  }
+
+  function applyHomelab(scene, d) {
+    scene.setStatus(d ? d.devices : {});
+    var sc = screenOf(d);
+    scene.setScreenText(sc.text, sc.color);
+    if (d && d.weather !== null && d.weather !== undefined) scene.setWeather(d.weather);
+  }
+
   function run(quality) {
-    var scene = window.CatScene.create(canvas, options(quality, { autoplay: false, inputTarget: canvas }));
+    var sc = screenOf(homelab);
+    var extra = { autoplay: false, inputTarget: canvas, status: homelab ? homelab.devices : {}, screenText: sc.text, screenColor: sc.color };
+    if (homelab && homelab.weather !== null && homelab.weather !== undefined) extra.weather = homelab.weather;
+    if (homelab && homelab.theme) extra.theme = homelab.theme;
+    var scene = window.CatScene.create(canvas, options(quality, extra));
     scene.frame(0);
+
+    setInterval(function () {
+      if (document.hidden) return;
+      fetchHomelab(function (d) { homelab = d; applyHomelab(scene, d); });
+    }, REFRESH_MS);
     root.classList.add('is-live');                     // le canvas apparaît en fondu au-dessus de l'affiche
     root.setAttribute('data-quality', quality);
 
@@ -127,9 +172,12 @@
 
   function boot() {
     later(function () {
+      var pending = 2, quality = null;
+      function ready() { if (--pending === 0 && quality) run(quality); }
+      fetchHomelab(function (d) { homelab = d; ready(); });     // en parallèle du moteur
       loadEngine(function () {
         if (!window.CatScene) return;
-        pickQuality(function (quality) { if (quality) run(quality); });
+        pickQuality(function (q) { quality = q; ready(); });
       });
     });
   }
