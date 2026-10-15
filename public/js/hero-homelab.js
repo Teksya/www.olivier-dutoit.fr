@@ -2,7 +2,7 @@
   'use strict';
 
   // ── Hero : scène pixel art du homelab ─────────────────────────────
-  // L'affiche est déjà à l'écran (LCP). Après le chargement de la page, on charge le moteur,
+  // L'affiche est déjà à l'écran (LCP). Après le chargement et la première interaction (ou 8 s), on charge le moteur,
   // on mesure ce que la machine tient, puis le canvas prend le relais par-dessus l'affiche.
   // Trop lent, mouvement réduit ou canvas absent : l'affiche reste, rien ne tourne.
 
@@ -146,6 +146,65 @@
   // Boutons transparents posés sur la scène (accessibles au clavier), infobulle au survol ou au focus,
   // panneau de détail au clic. Les positions viennent de scene.getHotspots() (pixels du canvas).
   var STATUS_FR = { up: 'en ligne', degraded: 'dégradé', down: 'hors ligne', unknown: 'état inconnu' };
+
+  // ── Accessibilité : le canvas devient l'image décrite (role img), l'état du homelab reste lisible en texte ──
+  var ACTIVITY_FR = {
+    napRack: 'fait la sieste sur la baie', napSofa: 'dort sur le canapé', napTree: 'dort en haut de l\'arbre à chat',
+    napSun: 'fait la sieste au soleil', eat: 'mange', drink: 'boit', window: 'regarde par la fenêtre',
+    groom: 'fait sa toilette', roll: 'se roule par terre', ball: 'joue à la balle', scratch: 'fait ses griffes',
+    zoomies: 'court dans tous les sens', box: 'joue dans son carton', sit: 'est assise sur le tapis',
+    incident: 'fixe un appareil en panne', celebrate: 'fait la fête', laser: 'poursuit le point laser'
+  };
+  var SUMMARY = {
+    up: 'Tous les services suivis sont en ligne.',
+    degraded: 'Au moins un service répond lentement.',
+    down: 'Au moins un service est hors ligne.',
+    unknown: 'État du homelab indisponible pour le moment.'
+  };
+
+  function setupDescription(scene) {
+    var poster = root.querySelector('.hero__poster');
+    var summary = root.querySelector('[data-hero-status-summary]');
+    var list = root.querySelector('[data-hero-status-list]');
+    var last = '';
+
+    function homelabText() {
+      var g = homelab ? homelab.global : 'unknown';
+      if (homelab && homelab.groups && homelab.groups.length) {
+        var up = homelab.groups.filter(function (x) { return x.status === 'up'; }).length;
+        return 'Homelab : ' + up + ' service' + (up > 1 ? 's' : '') + ' sur ' + homelab.groups.length + ' en ligne.';
+      }
+      return SUMMARY[g] || SUMMARY.unknown;
+    }
+    function label() {
+      var act = ACTIVITY_FR[scene.activity()] || 'vit sa vie';
+      return 'Scène animée en pixel art, un bureau avec une baie serveur : ' + root.dataset.catName + ', la chatonne, ' + act + '. ' + homelabText();
+    }
+    function refreshLabel() {
+      var l = label();
+      if (l !== last) { canvas.setAttribute('aria-label', l); last = l; }
+    }
+    // Liste des services : mêmes textes que le rendu serveur
+    function sync() {
+      var g = homelab ? homelab.global : 'unknown';
+      summary.textContent = (SUMMARY[g] || SUMMARY.unknown) + (homelab && g !== 'unknown' && homelab.time ? ' Relevé à ' + homelab.time.hhmm + ' (heure de Paris).' : '');
+      list.innerHTML = '';
+      ((homelab && homelab.groups) || []).forEach(function (x) {
+        var li = document.createElement('li');
+        li.textContent = x.name + ' : ' + STATUS_FR[x.status] + (x.latency !== null && x.status !== 'down' ? ', ' + x.latency + ' ms' : '');
+        list.appendChild(li);
+      });
+      refreshLabel();
+    }
+
+    // Le canvas prend le relais de l'affiche : une seule image décrite pour les lecteurs d'écran
+    canvas.removeAttribute('aria-hidden');
+    canvas.setAttribute('role', 'img');
+    poster.setAttribute('aria-hidden', 'true');
+    sync();
+    setInterval(function () { if (!document.hidden) refreshLabel(); }, 2000);   // l'activité de Blue change
+    return { sync: sync };
+  }
   var HOTSPOT_MS = 250;
 
   function catAge() {
@@ -290,10 +349,11 @@
     var scene = window.CatScene.create(canvas, options(quality, extra));
     scene.frame(0);
     var spots = setupHotspots(scene);
+    var a11y = setupDescription(scene);
 
     setInterval(function () {
       if (document.hidden) return;
-      fetchHomelab(function (d) { homelab = d; applyHomelab(scene, d); spots.sync(); });
+      fetchHomelab(function (d) { homelab = d; applyHomelab(scene, d); spots.sync(); a11y.sync(); });
     }, REFRESH_MS);
     root.classList.add('is-live');                     // le canvas apparaît en fondu au-dessus de l'affiche
     root.setAttribute('data-quality', quality);
@@ -334,6 +394,24 @@
     });
   }
 
-  if (document.readyState === 'complete') boot();
-  else window.addEventListener('load', boot);
+  // Le moteur coûte du calcul (chargement, mesure, premier rendu) : on attend que le visiteur interagisse
+  // (souris, doigt, défilement, clavier) ou 8 s sans interaction, pour ne pas ralentir l'arrivée sur la page.
+  var ENGAGE_EVENTS = ['pointermove', 'pointerdown', 'touchstart', 'scroll', 'wheel', 'keydown'];
+  var ENGAGE_FALLBACK_MS = 8000;
+  function whenEngaged(fn) {
+    var done = false, timer = 0, opts = { passive: true, capture: true };
+    function go() {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      ENGAGE_EVENTS.forEach(function (e) { window.removeEventListener(e, go, opts); });
+      fn();
+    }
+    ENGAGE_EVENTS.forEach(function (e) { window.addEventListener(e, go, opts); });
+    timer = setTimeout(go, ENGAGE_FALLBACK_MS);
+  }
+
+  function start() { whenEngaged(boot); }
+  if (document.readyState === 'complete') start();
+  else window.addEventListener('load', start);
 })();

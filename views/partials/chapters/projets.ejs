@@ -1,10 +1,10 @@
 <%# Chapitre Projets : filtres et fenêtre de détail pilotés par effects.js %>
   <!-- FILTRES -->
   <% const allTags = [...new Set(projects.flatMap(p => p.tags || []))].sort((a, b) => a.localeCompare(b)); %>
-  <div class="reveal flex flex-wrap gap-2" id="work-filters" role="tablist" aria-label="Filtrer les projets par technologie">
-    <button class="work-filter is-active rounded-full border border-accent px-3.5 py-1.5 text-xs text-strong transition-colors" data-filter="all" type="button">Tous</button>
+  <div class="reveal flex flex-wrap gap-2" id="work-filters" role="group" aria-label="Filtrer les projets par technologie">
+    <button class="work-filter is-active rounded-full border border-accent px-3.5 py-1.5 text-xs text-strong transition-colors" data-filter="all" type="button" aria-pressed="true">Tous</button>
     <% allTags.forEach(function (tag) { %>
-      <button class="work-filter rounded-full border border-line px-3.5 py-1.5 text-xs text-muted transition-colors hover:text-body" data-filter="<%= tag %>" type="button"><%= tag %></button>
+      <button class="work-filter rounded-full border border-line px-3.5 py-1.5 text-xs text-muted transition-colors hover:text-body" data-filter="<%= tag %>" type="button" aria-pressed="false"><%= tag %></button>
     <% }); %>
   </div>
 

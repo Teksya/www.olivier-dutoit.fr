@@ -14,17 +14,21 @@ const path = require('path');
 
 const engine = path.resolve(process.env.CAT_ENGINE_DIR || path.join(__dirname, '..', '..', 'cat-abw-iso3d-webanim'));
 const dest = path.join(__dirname, '..', 'vendor', 'cat-scene');
-const files = [
-  ['src/cat-scene.js', 'cat-scene.js'],
-  ['exports/portfolio-jour.png', 'portfolio-jour.png'],
-  ['exports/portfolio-nuit.png', 'portfolio-nuit.png']
-];
+// Le moteur et toutes les affiches du préréglage portfolio (jour, nuit, et par thème)
+const posters = fs.existsSync(path.join(engine, 'exports'))
+  ? fs.readdirSync(path.join(engine, 'exports')).filter((f) => /^portfolio(-[a-z]+)*.png$/.test(f)).sort()
+  : [];
+const files = [['src/cat-scene.js', 'cat-scene.js']].concat(posters.map((f) => ['exports/' + f, f]));
+if (!posters.length) {
+  console.error('Aucune affiche dans ' + path.join(engine, 'exports') + ' (lancer `npm run export:portfolio` dans le moteur)');
+  process.exit(1);
+}
 
 fs.mkdirSync(dest, { recursive: true });
 files.forEach(([from, to]) => {
   const src = path.join(engine, from);
   if (!fs.existsSync(src)) {
-    console.error('Introuvable : ' + src + (from.startsWith('exports/') ? ' (lancer `npm run export:portfolio` dans le moteur)' : ''));
+    console.error('Introuvable : ' + src);
     process.exit(1);
   }
   fs.copyFileSync(src, path.join(dest, to));

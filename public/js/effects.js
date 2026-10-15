@@ -88,6 +88,7 @@
       workFilters.querySelectorAll('.work-filter').forEach(function (b) {
         var on = b === btn;
         b.classList.toggle('is-active', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
         b.classList.toggle('border-accent', on);
         b.classList.toggle('text-strong', on);
         b.classList.toggle('border-line', !on);

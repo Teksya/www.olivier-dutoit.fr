@@ -37,7 +37,7 @@ Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce q
 | --- | --- | --- |
 | 1. Socle | Tailwind v4 compilé, GSAP servi en local | ✅ |
 | 2. Une seule page | Tout le site en chapitres, header en index, redirections des anciennes pages | ✅ |
-| 3. Hero homelab | Scène pixel art en hero (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) | ✅ intégration, ✅ vraies données, ✅ interactions, ⏳ Blue grandit, ⏳ finitions |
+| 3. Hero homelab | Scène pixel art en hero (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) : intégration, vraies données, interactions, Blue grandit, finitions | ✅ |
 | 4. Ce site | Le trajet d'une requête, du visiteur au container Express | ⏳ |
 
 ## 🛠️ Lancer en local
@@ -106,10 +106,11 @@ npm start
 
 Le haut de l'accueil montre mon bureau et ma baie en pixel art, avec Blue, ma chatonne, qui vit sa vie. La scène vient de mon moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim) (préréglage `portfolio`), cloné à côté de ce dépôt.
 
-- **Mettre à jour le moteur** : dans le dépôt du moteur, `npm run export:portfolio` (affiches jour et nuit), puis ici `npm run vendor:cat`. Les fichiers copiés dans `vendor/cat-scene/` sont commités et servis sous `/vendor/cat-scene/`, avec une empreinte dans l'URL (cache long). Autre emplacement du moteur : `CAT_ENGINE_DIR=/chemin npm run vendor:cat`.
-- **Chargement** : l'affiche (jour de 8 h à 19 h, heure de Paris, sinon nuit) s'affiche tout de suite. Après le chargement de la page, [public/js/hero-homelab.js](public/js/hero-homelab.js) charge le moteur, mesure le temps de rendu, puis le canvas prend le relais : qualité `hd`, `standard` si la machine est juste, ou l'affiche seule si c'est trop lent. Rien ne tourne en `prefers-reduced-motion`.
+- **Mettre à jour le moteur** : dans le dépôt du moteur, `npm run export:portfolio` (affiches jour et nuit, par thème, et leur version légère pour mobile), puis ici `npm run vendor:cat`. Les fichiers copiés dans `vendor/cat-scene/` sont commités et servis sous `/vendor/cat-scene/`, avec une empreinte dans l'URL (cache long). Autre emplacement du moteur : `CAT_ENGINE_DIR=/chemin npm run vendor:cat`.
+- **Chargement** : l'affiche (jour de 8 h à 19 h, heure de Paris, sinon nuit ; version du thème saisonnier actif ; version légère sous 640 px) est préchargée et s'affiche tout de suite. Après le chargement de la page et la première interaction (souris, doigt, défilement, clavier) ou 8 s, [public/js/hero-homelab.js](public/js/hero-homelab.js) charge le moteur, mesure le temps de rendu, puis le canvas prend le relais : qualité `hd`, `standard` si la machine est juste, ou l'affiche seule si c'est trop lent. Rien ne tourne en `prefers-reduced-motion`.
 - **Mobile** : cadrage vertical sur la baie et l'arbre à chat, sans les activités hors champ. Un tap caresse Blue, un appui long allume le laser.
 - **Pause** : bouton en haut à droite, mémorisé dans le navigateur.
+- **Accessibilité** : une fois lancé, le canvas est l'image décrite (`role="img"`, texte mis à jour selon ce que fait Blue et l'état du homelab) et l'affiche est masquée aux lecteurs d'écran. L'état du homelab est aussi en texte (rendu par le serveur, mis à jour toutes les 60 s). Sans JS : l'affiche, et l'état du homelab affiché sous le hero.
 
 ### 🖱️ Interactions
 
@@ -132,7 +133,7 @@ Les voyants de la baie reflètent la status page Uptime Kuma, via `GET /api/home
 | `devices` | État par appareil de la baie (le pire des groupes qui lui sont associés) |
 | `time` | Heure de Paris |
 | `weather` | Code météo WMO d'Open-Meteo pour Saint-Étienne (cache 20 min, côté serveur) |
-| `theme` | Thème saisonnier actif (`halloween`, `noel`) ou `null` |
+| `theme` | Thème saisonnier actif (`halloween`, `noel`, `anniversaire`) ou `null` |
 
 Ni IP, ni port, ni hostname, ni URL de monitor : seulement des noms publics et des états.
 
@@ -154,6 +155,28 @@ La correspondance se règle dans [config/homelab-scene.json](config/homelab-scen
 - **Ajouter un service** : crée le monitor dans Kuma et place-le dans un groupe de la status page publique. Si ce groupe est déjà dans `groupes`, il compte tout de suite ; sinon ajoute le groupe avec son appareil et son nom public, puis redémarre le serveur.
 - **Écran du bureau** : `OK n/m`, `DEGRADE`, `PANNE n/m` ou `INCONNU`.
 - La validation est faite par `validateHomelabSceneConfig()` dans `server.js`, réutilisable par une future page d'admin avant d'écrire le fichier.
+
+## 📖 Mode d'emploi
+
+**Ajouter un service** : crée le monitor dans Uptime Kuma et range-le dans un groupe de la status page publique. Si le groupe est déjà associé à un appareil dans `config/homelab-scene.json`, il compte tout de suite (deux minutes au plus : cache serveur de 60 s, puis rafraîchissement de la page). Il apparaît dans l'infobulle et le panneau de l'appareil, et dans l'état du homelab en texte.
+
+**Changer la correspondance** : dans `config/homelab-scene.json`, la clé de `groupes` est le nom exact du groupe dans Kuma, `appareil` est l'un de `fw`, `switch`, `server`, `nas`, `isp`, `mini`, `ups`, et `nomPublic` est ce que voient les visiteurs. Plusieurs groupes peuvent partager un appareil (le pire état l'emporte). Redémarre le serveur après la modification. Un appareil sans groupe reste éteint.
+
+**Ajouter un thème** :
+1. Dans le moteur, ajoute une section comme *Halloween*, *Noël* ou *Anniversaire* dans `src/cat-scene.js` : un drapeau (`var XX = opt.theme === 'nom'`), une partie fixe dessinée une fois, une partie animée appelée à chaque image, et si besoin un chapeau (`HAT`, couleurs dans `surfColor`).
+2. Ajoute le nom à la liste du mode `posters` de `tools/export.js`, puis `npm run export:portfolio` et `npm run build:wallpaper`.
+3. Ici : `npm run vendor:cat`, puis une plage dans `themes` de `config/homelab-scene.json` (`{ "nom": "...", "du": "MM-JJ", "au": "MM-JJ" }`, la première plage qui correspond l'emporte).
+
+**Quand Blue grandit** : son âge est recalculé à chaque chargement de page à partir de sa date de naissance (15 août 2026). Jusqu'à 12 mois, son corps s'allonge (jusqu'à +25 %) et s'épaissit (+12 %), ses pattes et sa queue s'allongent (+30 %), et sa tête garde sa taille, donc paraît plus petite ; la croissance est rapide les premiers mois, puis ralentit. À 12 mois (mi-août 2027), elle a ses proportions d'adulte et ne change plus. Ses activités ne changent pas avec l'âge. Les affiches montrent le modèle de 2 mois : pour qu'elles suivent, relance de temps en temps dans le moteur `npm run export:portfolio -- --age=<mois>` (12 une fois adulte), puis ici `npm run vendor:cat`. Chaque 14 septembre, une bougie de plus sur le gâteau (5 au plus).
+
+**Performances** (Lighthouse 12.6, accueil, en local derrière une compression gzip comme en production) :
+
+| | Perf | Accessibilité | Bonnes pratiques | SEO | LCP | TBT |
+| --- | --- | --- | --- | --- | --- | --- |
+| v4 mobile | 80 | 90 | 100 | 100 | 4,1 s | 0 ms |
+| v5 mobile | 87 | 96 | 100 | 100 | 3,5 s | 0 ms |
+| v4 desktop | 99 | 90 | 100 | 100 | 0,8 s | 0 ms |
+| v5 desktop | 98 | 96 | 100 | 100 | 1,1 s | 0 ms |
 
 ## 🗂️ Structure du projet
 

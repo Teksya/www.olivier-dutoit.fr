@@ -103,14 +103,11 @@ app.use('/vendor/gsap', express.static(path.join(__dirname, 'node_modules', 'gsa
 // Cache long : l'URL porte une empreinte des fichiers, qui change à chaque mise à jour.
 const catSceneDir = path.join(__dirname, 'vendor', 'cat-scene');
 app.use('/vendor/cat-scene', express.static(catSceneDir, { maxAge: '30d' }));
+const catSceneFiles = fs.existsSync(catSceneDir) ? fs.readdirSync(catSceneDir).sort() : [];
 app.locals.catSceneVersion = (() => {
 	const hash = crypto.createHash('md5');
-	try {
-		['cat-scene.js', 'portfolio-jour.png', 'portfolio-nuit.png'].forEach((f) => hash.update(fs.readFileSync(path.join(catSceneDir, f))));
-		return hash.digest('hex').slice(0, 8);
-	} catch (e) {
-		return '0';
-	}
+	catSceneFiles.forEach((f) => hash.update(fs.readFileSync(path.join(catSceneDir, f))));
+	return catSceneFiles.length ? hash.digest('hex').slice(0, 8) : '0';
 })();
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -400,15 +397,19 @@ async function loadUptimeKumaSnapshot(config) {
 let homelabCache = null;
 let homelabCacheAt = 0;
 let homelabPending = null;
+let homelabFailedAt = 0;
 
 function resetHomelabCache() {
 	homelabCache = null;
 	homelabCacheAt = 0;
+	homelabFailedAt = 0;
 }
 
 // Snapshot partagé (cache 60 s, une seule requête en vol). null si désactivé ou indisponible.
+// Après un échec, on ne réessaie pas avant 30 s : une status page en panne ne ralentit pas chaque page.
 function getHomelabSnapshot() {
 	if (homelabCache && Date.now() - homelabCacheAt < 60000) return Promise.resolve(homelabCache);
+	if (Date.now() - homelabFailedAt < 30000) return Promise.resolve(null);
 	if (!parseBoolean(spotifyConfig.HOMELAB_ENABLED)) return Promise.resolve(null);
 	const config = getUptimeKumaConfig();
 	if (!config.hostname) return Promise.resolve(null);
@@ -416,13 +417,14 @@ function getHomelabSnapshot() {
 
 	homelabPending = loadUptimeKumaSnapshot(config)
 		.then((snapshot) => {
-			if (!snapshot.groups.length) return null;
+			if (!snapshot.groups.length) { homelabFailedAt = Date.now(); return null; }
 			homelabCache = snapshot;
 			homelabCacheAt = Date.now();
 			return snapshot;
 		})
 		.catch((e) => {
 			console.error('Uptime Kuma API error:', e.message);
+			homelabFailedAt = Date.now();
 			return null;
 		})
 		.finally(() => { homelabPending = null; });
@@ -922,20 +924,51 @@ const CONTACT_MESSAGES = {
 	'send-failed': { type: 'error', text: 'Impossible d\'envoyer l\'email.' }
 };
 
-// Affiche jour ou nuit du hero selon l'heure de Paris
+// Affiche du hero : jour ou nuit (heure de Paris), version du thème saisonnier si elle existe
 function isDaytime(hour) { return hour >= 8 && hour < 19; }
+function heroPoster(now, theme) {
+	const moment = isDaytime(now.hour) ? 'jour' : 'nuit';
+	const themed = `portfolio-${theme}-${moment}.png`;
+	return theme && catSceneFiles.includes(themed) ? themed : `portfolio-${moment}.png`;
+}
 
-app.get('/', (req, res) => res.render('index', {
-	heroPoster: isDaytime(parisNow().hour) ? 'portfolio-jour.png' : 'portfolio-nuit.png',
-	title: 'Olivier D - Accueil',
-	description: 'Étudiant en BTS SIO SISR en alternance, passionné par les réseaux, l\'administration système et le développement web. Projets, parcours et contact.',
-	url: 'https://www.olivier-dutoit.fr',
-	ogImage: 'https://www.olivier-dutoit.fr/og-image.png',
-	projects: loadProjects(),
-	aboutConfig: getAboutConfig(),
-	turnstileSiteKey,
-	contactStatus: Object.prototype.hasOwnProperty.call(CONTACT_MESSAGES, req.query.contact) ? CONTACT_MESSAGES[req.query.contact] : null
-}));
+// Pour le rendu serveur : n'attend pas la status page plus de `ms` (sinon état inconnu)
+function getHomelabSnapshotWithin(ms) {
+	let timer;
+	return Promise.race([
+		getHomelabSnapshot(),
+		new Promise((resolve) => { timer = setTimeout(() => resolve(null), ms); })
+	]).finally(() => clearTimeout(timer));
+}
+
+app.get('/', async (req, res, next) => {
+	try {
+		const now = parisNow();
+		const theme = activeTheme(now.monthDay);
+		const snapshot = await getHomelabSnapshotWithin(800);
+		const poster = heroPoster(now, theme), posterSd = poster.replace(/\.png$/, '-sd.png'), v = app.locals.catSceneVersion;
+		res.render('index', {
+			heroPoster: poster,
+			heroPosterSd: posterSd,
+			// L'affiche du hero est l'élément LCP : le navigateur la découvre dès le <head>
+			preloadImages: [
+				{ href: `/vendor/cat-scene/${posterSd}?v=${v}`, media: '(max-width: 639px)' },
+				{ href: `/vendor/cat-scene/${poster}?v=${v}`, media: '(min-width: 640px)' }
+			],
+			homelabState: Object.assign(buildHomelabState(snapshot), { hhmm: now.hhmm }),
+			title: 'Olivier D - Accueil',
+			description: 'Étudiant en BTS SIO SISR en alternance, passionné par les réseaux, l\'administration système et le développement web. Projets, parcours et contact.',
+			url: 'https://www.olivier-dutoit.fr',
+			ogImage: 'https://www.olivier-dutoit.fr/og-image.png',
+			projects: loadProjects(),
+			aboutConfig: getAboutConfig(),
+			turnstileSiteKey,
+			contactStatus: Object.prototype.hasOwnProperty.call(CONTACT_MESSAGES, req.query.contact) ? CONTACT_MESSAGES[req.query.contact] : null
+		});
+	} catch (e) {
+		next(e);
+	}
+});
 
 // Anciennes pages, devenues des chapitres de l'accueil
 app.get('/work', (req, res) => res.redirect(301, '/#projets'));

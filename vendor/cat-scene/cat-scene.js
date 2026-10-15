@@ -931,8 +931,10 @@
     }
     var LED_DOWN = '#ef4444', LED_DEGRADED = '#f97316', LED_UNKNOWN = '#3a3f47';
 
+    var LED_DRAWN = [];                                              // voyants de la dernière image (mode état réel)
     function drawLeds(st) {
       var t = st.t;
+      LED_DRAWN.length = 0;
       LEDS.forEach(function (l) {
         if (st.power <= l.thr) return;
         var col, s = statusOf(ledDevice(l));
@@ -949,7 +951,9 @@
         else if (l.kind === 'isp') col = l.i === 3 ? (Math.floor(t / 400) % 2 ? '#3ddc84' : '#1d5c36') : '#3ddc84';
         else if (l.kind === 'mini') col = '#e8f0ff';
         else col = '#3ddc84';
-        px(P(l.x, l.y !== undefined ? l.y : YE - 0.02, l.z), col, Math.max(1, Math.round(K / 6)));
+        var lp = P(l.x, l.y !== undefined ? l.y : YE - 0.02, l.z);
+        px(lp, col, Math.max(1, Math.round(K / 6)));
+        if (STATUS) LED_DRAWN.push([lp, col]);
       });
       var f0 = U(1) + 0.49, f1 = U(1) + 2 * UH - 0.49;
       var sUps = statusOf('ups'), sFw = statusOf('fw');
@@ -1929,6 +1933,15 @@
     }
     function toggleLaser() { PTR.laserOn = !PTR.laserOn; }
     function pointerLeave() { PTR.inside = false; }
+    /* Voyants redessinés par-dessus la lumière ambiante, sauf là où la chatonne passe devant */
+    function redrawLeds() {
+      var e = Math.max(1, Math.round(K / 6));
+      LED_DRAWN.forEach(function (d) {
+        var x = Math.round(d[0][0]), y = Math.round(d[0][1]);
+        if (lastBox) { var lx = x - lastBox.x0, ly = y - lastBox.y0; if (lx >= 0 && ly >= 0 && lx < lastBox.w && ly < lastBox.h && MK[ly * lastBox.w + lx]) return; }
+        px(d[0], d[1], e);
+      });
+    }
     function overCat(cx, cy) {
       if (!lastBox) return false;
       var lx = Math.floor(cx) - lastBox.x0, ly = Math.floor(cy) - lastBox.y0;
@@ -2516,6 +2529,7 @@
 
       return {
         statusChanged: statusChanged,
+        activity: function () { return chasing ? 'laser' : incidentOn ? 'incident' : (lastAct || 'napRack'); },
         play: function (name) {
           var known = activityList(lastHour, lastSunny).some(function (a) { return a[0] === name; });
           if (known) pendingPlay = name;
@@ -2641,6 +2655,7 @@
       drawZzz(cat.info.head, ms, st.zzz);
       ctx.drawImage(fg, 0, 0);
       if (LIVE) applyDaylight(hour);
+      if (STATUS) redrawLeds();                                       // état réel : couleurs franches, même en plein jour
       ctx.drawImage(vig, 0, 0);
     }
 
@@ -2685,6 +2700,7 @@
 
     var api = { frame: frame, duration: TOTAL, start: start, pause: pause, resume: resume, isPaused: function () { return paused; },
       getHotspots: getHotspots, play: function (name) { return LIVE ? LIVE.play(name) : false; },
+      activity: function () { return LIVE ? LIVE.activity() : null; },   // activité en cours (vie autonome), pour un texte alternatif
       canvas: cv, state: null, setWeather: setWeather, setStatus: setStatus, setScreenText: setScreenText, pointer: pointer, pointerLeave: pointerLeave,
       toggleLaser: toggleLaser, set: function (k, v) { opt[k] = v; } };
     if (opt.autoplay !== false) {

@@ -17,6 +17,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
+  <% (locals.preloadImages || []).forEach(function (img) { %>
+  <link rel="preload" as="image" href="<%= img.href %>" media="<%= img.media %>" fetchpriority="high">
+  <% }); %>
   <link rel="stylesheet" href="/css/app.css">
   <script src="/js/effects.js" defer></script>
 </head>
@@ -30,7 +33,7 @@
         <% (locals.navChapters || []).forEach(function (c) { %>
           <li class="flex-none">
             <a href="/#<%= c.id %>" class="nav-link flex items-baseline gap-1.5 text-xs font-normal transition-colors" data-chapter-link="<%= c.id %>">
-              <span class="font-mono text-[10px] text-accenth/70"><%= c.num %></span><%= c.label %>
+              <span class="font-mono text-[10px] text-accenth"><%= c.num %></span><%= c.label %>
             </a>
           </li>
         <% }); %>
