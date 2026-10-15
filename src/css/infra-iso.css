@@ -1,0 +1,193 @@
+/* ═══════════════════════════════════════════════════
+   Chapitre Infrastructure : scène isométrique en CSS 3D
+   Scène construite par public/js/infra-iso.js. Projection orthogonale
+   (pas de perspective). Avec rotateZ(-45deg), les faces visibles d'un
+   bloc sont le dessus, le côté sud (y max) et le côté ouest (x min).
+   On n'anime que transform et opacity, et jamais l'opacité d'un élément
+   en preserve-3d (elle aplatirait la 3D) : seulement celle des faces.
+   ═══════════════════════════════════════════════════ */
+
+.infra {
+  --iso-s: 84px;        /* emprise d'un container */
+  --iso-h: 56px;        /* hauteur d'un container */
+  --iso-g: 26px;        /* espace entre containers */
+  --iso-p: 30px;        /* marge de la plaque */
+  --iso-t: 16px;        /* épaisseur de la plaque */
+  --iso-online: #22c55e;
+  --iso-offline: #ef4444;
+}
+
+/* ── Liste (version accessible, sans JS, mobile) ── */
+.infra-dot {
+  width: 8px; height: 8px; flex: none;
+  border-radius: 999px;
+  background: var(--iso-online);
+  box-shadow: 0 0 0 3px rgba(34,197,94,.15);
+}
+.infra-item[data-up="false"] .infra-dot {
+  background: var(--iso-offline);
+  box-shadow: 0 0 0 3px rgba(239,68,68,.15);
+}
+.infra-item[data-up="false"] { opacity: .65; }
+
+.infra-bar {
+  display: block;
+  width: 100%; height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-surface2);
+}
+.infra-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  transform-origin: left center;
+  transform: scaleX(var(--lat, 0));
+  transition: transform .8s cubic-bezier(.16,1,.3,1);
+}
+
+/* ── Scène : seulement quand le JS l'a construite, et à partir de sm ── */
+.infra-scene { display: none; position: relative; overflow: hidden; }
+
+@media (min-width: 40rem) {
+  .infra.is-3d .infra-scene { display: block; }
+  /* La liste reste lue par les lecteurs d'écran */
+  .infra.is-3d .infra-list {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+.iso-fit {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform-style: preserve-3d;
+}
+
+.iso-world {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+
+/* Plaque commune (le serveur) */
+.iso-plate,
+.iso-plate__side { position: absolute; }
+.iso-plate {
+  inset: 0;
+  background: #1d1d21;
+  border: 1px solid rgba(255,255,255,.07);
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.iso-plate__side--south {
+  left: 0; right: 0; top: 100%;
+  height: var(--iso-t);
+  transform-origin: top center;
+  transform: rotateX(-90deg);
+  background: #141417;
+  border: 1px solid rgba(255,255,255,.05);
+}
+.iso-plate__side--west {
+  top: 0; bottom: 0; right: 100%;
+  width: var(--iso-t);
+  transform-origin: right center;
+  transform: rotateY(-90deg);
+  background: #19191c;
+  border: 1px solid rgba(255,255,255,.05);
+}
+.iso-plate__label {
+  position: absolute;
+  left: 10px; bottom: 6px;
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.28);
+}
+
+/* Container : un emplacement fixe + un bloc animé (chute en z) */
+.iso-slot,
+.iso-box { position: absolute; transform-style: preserve-3d; }
+.iso-slot { width: var(--iso-s); height: var(--iso-s); }
+.iso-box  { inset: 0; }
+
+.iso-face {
+  position: absolute;
+  border: 1px solid rgba(255,255,255,.07);
+}
+/* Trois teintes pour la lumière : dessus clair, ouest moyen, sud sombre */
+.iso-face--top {
+  inset: 0;
+  transform: translateZ(var(--iso-h));
+  background: #303036;
+}
+.iso-face--west {
+  top: 0; left: 0;
+  width: var(--iso-h); height: var(--iso-s);
+  transform-origin: left center;
+  transform: rotateY(-90deg);
+  background: #26262b;
+}
+.iso-face--south {
+  left: 0; top: calc(var(--iso-s) - var(--iso-h));
+  width: var(--iso-s); height: var(--iso-h);
+  transform-origin: bottom center;
+  transform: rotateX(-90deg);
+  background: #1e1e22;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 7px 7px 8px;
+}
+/* Container hors ligne : atténué (teintes plus sombres, pas d'opacité sur la 3D) */
+.iso-box[data-up="false"] .iso-face--top   { background: #222226; }
+.iso-box[data-up="false"] .iso-face--west  { background: #1b1b1e; }
+.iso-box[data-up="false"] .iso-face--south { background: #161618; }
+.iso-box[data-up="false"] .iso-name { color: var(--color-muted); }
+
+.iso-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 600 9.5px/1.2 var(--font-sans);
+  color: var(--color-strong);
+}
+.iso-meta { display: flex; align-items: center; gap: 5px; }
+.iso-ms {
+  flex: none;
+  font: 500 8px/1 var(--font-mono);
+  color: var(--color-body);
+}
+.iso-meta .infra-bar { height: 2px; }
+
+/* Voyant sur le dessus + anneau de heartbeat */
+.iso-led,
+.iso-ring {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 12px; height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 999px;
+}
+.iso-led {
+  background: var(--iso-online);
+  box-shadow: 0 0 10px 2px rgba(34,197,94,.45);
+}
+.iso-ring {
+  border: 1.5px solid var(--iso-online);
+  opacity: 0;
+}
+.iso-box[data-up="false"] .iso-led {
+  background: var(--iso-offline);
+  box-shadow: 0 0 10px 2px rgba(239,68,68,.4);
+}
+.iso-box[data-up="false"] .iso-ring { border-color: var(--iso-offline); }
+
+@media (prefers-reduced-motion: reduce) {
+  .infra-bar__fill { transition: none; }
+  .iso-ring { display: none; }
+}

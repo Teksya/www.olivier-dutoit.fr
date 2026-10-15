@@ -11,6 +11,7 @@
 /* Styles maison : dans un layer pour que les utilitaires gardent la priorité,
    comme avec l'ancien CDN Play (injecté après styles.css). */
 @import "../../public/styles.css" layer(components);
+@import "./infra-iso.css" layer(components);
 
 /* Preflight v4 : les boutons passent en cursor: default, on garde le pointer de la v3 */
 @layer base {

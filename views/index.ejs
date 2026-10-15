@@ -1,16 +1,19 @@
 <%- include('partials/header') %>
 
 <%
+  // Chapitres dans l'ordre, numérotés après filtrage (Infrastructure masqué si le homelab est désactivé)
   const chapters = [
-    { num: '01', id: 'chapitre-infrastructure', label: 'Infrastructure', title: 'Infrastructure',
+    { key: 'infra', enabled: homelabEnabled, id: 'chapitre-infrastructure', label: 'Infrastructure', title: 'Infrastructure',
       text: 'Les services de mon homelab, relevés en direct sur ma status page. Chaque bloc est un service : vert s\'il répond, avec sa latence.' },
-    { num: '02', id: 'chapitre-ce-site', label: 'Ce site', title: 'Comment ce site est servi',
+    { key: 'site', id: 'chapitre-ce-site', label: 'Ce site', title: 'Comment ce site est servi',
       text: 'Le chemin d\'une requête, de votre navigateur jusqu\'au container qui répond. À chaque étape, les contrôles qui la protègent.' },
-    { num: '03', id: 'chapitre-projets', label: 'Projets', title: 'Projets mis en avant',
+    { key: 'projets', id: 'chapitre-projets', label: 'Projets', title: 'Projets mis en avant',
       text: 'Une sélection de réalisations, entre infrastructure et développement. Le reste est sur la page Travaux.' },
-    { num: '04', id: 'chapitre-competences', label: 'Compétences', title: 'Compétences',
+    { key: 'competences', id: 'chapitre-competences', label: 'Compétences', title: 'Compétences',
       text: 'Ce que j\'utilise en cours comme en alternance, rangé par domaine.' }
-  ];
+  ].filter((c) => c.enabled !== false);
+  const ch = {};
+  chapters.forEach((c, i) => { c.num = String(i + 1).padStart(2, '0'); ch[c.key] = c; });
 
   const skills = [
     { domain: 'Réseaux et systèmes', items: ['Windows Server', 'Linux', 'Cisco', 'Mikrotik', 'Proxmox'] },
@@ -51,25 +54,27 @@
         </div>
       </section>
 
-      <!-- 01 INFRASTRUCTURE (scène iso : phase 3) -->
-      <section class="chapter" id="<%= chapters[0].id %>" aria-labelledby="<%= chapters[0].id %>-titre">
-        <div class="reveal"><% chapterHead(chapters[0]); %></div>
-        <div class="chapter-visual reveal">
-          <div class="flex min-h-64 items-center justify-center rounded-3xl border border-dashed border-line2 text-sm text-muted">Scène en préparation</div>
+      <!-- INFRASTRUCTURE EN DIRECT -->
+      <% if (ch.infra) { %>
+      <section class="chapter" id="<%= ch.infra.id %>" aria-labelledby="<%= ch.infra.id %>-titre">
+        <div class="reveal"><% chapterHead(ch.infra); %></div>
+        <div class="chapter-visual">
+          <%- include('partials/infra-iso') %>
         </div>
       </section>
+      <% } %>
 
-      <!-- 02 COMMENT CE SITE EST SERVI (flux : phase 4) -->
-      <section class="chapter" id="<%= chapters[1].id %>" aria-labelledby="<%= chapters[1].id %>-titre">
-        <div class="reveal"><% chapterHead(chapters[1]); %></div>
+      <!-- COMMENT CE SITE EST SERVI (flux : phase 4) -->
+      <section class="chapter" id="<%= ch.site.id %>" aria-labelledby="<%= ch.site.id %>-titre">
+        <div class="reveal"><% chapterHead(ch.site); %></div>
         <div class="chapter-visual reveal">
           <div class="flex min-h-64 items-center justify-center rounded-3xl border border-dashed border-line2 text-sm text-muted">Schéma en préparation</div>
         </div>
       </section>
 
-      <!-- 03 PROJETS MIS EN AVANT -->
-      <section class="chapter" id="<%= chapters[2].id %>" aria-labelledby="<%= chapters[2].id %>-titre">
-        <div class="reveal"><% chapterHead(chapters[2]); %></div>
+      <!-- PROJETS MIS EN AVANT -->
+      <section class="chapter" id="<%= ch.projets.id %>" aria-labelledby="<%= ch.projets.id %>-titre">
+        <div class="reveal"><% chapterHead(ch.projets); %></div>
         <div class="chapter-visual">
           <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <% homeProjects.forEach(function (project, i) { %>
@@ -92,9 +97,9 @@
         </div>
       </section>
 
-      <!-- 04 COMPÉTENCES -->
-      <section class="chapter" id="<%= chapters[3].id %>" aria-labelledby="<%= chapters[3].id %>-titre">
-        <div class="reveal"><% chapterHead(chapters[3]); %></div>
+      <!-- COMPÉTENCES -->
+      <section class="chapter" id="<%= ch.competences.id %>" aria-labelledby="<%= ch.competences.id %>-titre">
+        <div class="reveal"><% chapterHead(ch.competences); %></div>
         <div class="chapter-visual reveal">
           <div class="card grid gap-px overflow-hidden bg-line sm:grid-cols-2 lg:grid-cols-4">
             <% skills.forEach(function (group) { %>
@@ -115,6 +120,11 @@
   </div>
 </div>
 
+<% if (ch.infra) { %>
+<script src="/vendor/gsap/gsap.min.js" defer></script>
+<script src="/vendor/gsap/ScrollTrigger.min.js" defer></script>
+<script src="/js/infra-iso.js" defer></script>
+<% } %>
 <script src="/js/chapters.js" defer></script>
 
 <%- include('partials/footer') %>

@@ -17,13 +17,18 @@ Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce q
 
 ### 🚀 Fonctionnalités
 
-- **Accueil** en grille bento, avec apparition des cartes au défilement.
+- **Accueil** en chapitres numérotés, avec un index qui suit la lecture en desktop :
+  - **Infrastructure** : les services du homelab en vue isométrique 3D, état et latence en direct (`/api/infra`) ;
+  - **Comment ce site est servi** : le trajet d'une requête (à venir) ;
+  - **Projets mis en avant** : le projet featured puis les suivants de `projects.json` ;
+  - **Compétences**, rangées par domaine.
 - **Travaux** : projets filtrables par catégorie, détail dans une fenêtre, données dans `projects.json`.
 - **À propos** : parcours, diplômes vérifiables par QR code, et la section « En direct » :
   - Spotify (`/api/spotify`, avec flux en direct sur `/api/spotify/stream`) ;
   - Discord via [Lanyard](https://github.com/Phineas/lanyard) ;
   - GitHub (`/api/github`) ;
-  - homelab (`/api/uptime`), lu sur la status page avec un cache de 60 s.
+  - homelab (`/api/uptime`), lu sur la status page.
+- **Status page** : `/api/uptime` (par groupe) et `/api/infra` (par service) partagent une seule lecture de la status page, en cache 60 s.
 - **Contact** : formulaire protégé par Cloudflare Turnstile, envoi par SMTP (Nodemailer).
 - **Administration** (`/admin`) protégée par un code d'accès : activation des widgets, réglages de la status page, ajout et tri des projets.
 - **Pages légales** : mentions légales, confidentialité, CGU, et la politique de confidentialité de l'application Budgie.
@@ -34,8 +39,9 @@ Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce q
 | Phase | Contenu | État |
 | --- | --- | --- |
 | 1. Socle | Tailwind v4 compilé, GSAP servi en local | ✅ |
-| 2. Accueil | « Infrastructure en direct » : vue isométrique 3D des services du homelab | ⏳ |
-| 3. À propos | « Le trajet de votre requête » : du visiteur au container Express | ⏳ |
+| 2. Accueil | Chapitres, index sticky, cartes harmonisées sur toutes les pages | ✅ |
+| 3. Infrastructure | Vue isométrique 3D des services du homelab | ✅ |
+| 4. Ce site | Le trajet d'une requête, du visiteur au container Express | ⏳ |
 
 ## 🛠️ Lancer en local
 
@@ -98,6 +104,15 @@ npm start
 
 > 🟢 Le vert `#22c55e` veut dire « en ligne » partout sur le site. Les verts et rouges de Tailwind v3 sont repris tels quels dans `@theme`, la v4 les ayant changés.
 
+## 🖥️ Chapitre Infrastructure
+
+Chaque container de la scène est un monitor de la status page Uptime Kuma (adresse et page réglées dans `/admin`).
+
+- **Ajouter un service** : ajoute le monitor dans Uptime Kuma, puis place-le dans un groupe de la status page publique. Il apparaît sur l'accueil en deux minutes au plus (cache serveur de 60 s, puis rafraîchissement de la page toutes les 60 s), sous le nom affiché par la status page. L'ordre suit celui des groupes et des monitors.
+- **Ce qui sort du serveur** : `/api/infra` ne renvoie que `name`, `group`, `up` et `latency` (en ms, `null` si le monitor n'en mesure pas). Ni id, ni URL, ni hostname, ni message d'erreur.
+- **État** : seul le statut 1 d'Uptime Kuma compte comme en ligne ; « pending » et « maintenance » s'affichent hors ligne, comme dans `/api/uptime`.
+- **Sans JS, en mobile et pour les lecteurs d'écran** : la liste rendue par le serveur dans `views/partials/infra-iso.ejs`. La scène 3D (`public/js/infra-iso.js`, `src/css/infra-iso.css`) est décorative.
+
 ## 🗂️ Structure du projet
 
 ```text
@@ -105,7 +120,9 @@ npm start
 ├── server.js             Le serveur Express : pages, API, admin
 ├── manage-projects.js    Gestion des projets en ligne de commande
 ├── projects.json         Les projets affichés sur /work
-├── src/css/app.css       Source Tailwind (tokens dans @theme)
+├── src/css/
+│   ├── app.css           Source Tailwind (tokens dans @theme, composants)
+│   └── infra-iso.css     Scène isométrique du chapitre Infrastructure
 ├── public/
 │   ├── css/app.css       CSS compilé (commité)
 │   ├── styles.css        Styles maison, importés dans app.css

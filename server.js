@@ -333,12 +333,16 @@ function uptimeKumaGet(config, endpointPath) {
 				try { resolve(JSON.parse(d || '{}')); } catch (e) { reject(e); }
 			});
 		});
+		// Une status page qui ne répond pas ne doit pas bloquer l'accueil
+		req.setTimeout(5000, () => req.destroy(new Error('timeout')));
 		req.on('error', reject);
 		req.end();
 	});
 }
 
-async function loadUptimeKumaGroups(config) {
+// Lit la status page une fois et en tire les deux vues : par groupe (/api/uptime)
+// et par service (/api/infra). Liste blanche stricte : ni id, ni URL, ni message de monitor.
+async function loadUptimeKumaSnapshot(config) {
 	const [statusPage, heartbeatPage] = await Promise.all([
 		uptimeKumaGet(config, `/api/status-page/${encodeURIComponent(config.slug)}`),
 		uptimeKumaGet(config, `/api/status-page/heartbeat/${encodeURIComponent(config.slug)}`)
@@ -346,46 +350,91 @@ async function loadUptimeKumaGroups(config) {
 
 	const publicGroups = Array.isArray(statusPage.publicGroupList) ? statusPage.publicGroupList : [];
 	const heartbeats = heartbeatPage.heartbeatList || {};
+	const groups = [];
+	const services = [];
 
-	return publicGroups
+	publicGroups
+		.slice()
 		.sort((a, b) => (a.weight || 0) - (b.weight || 0))
-		.map((group) => {
-			const name = String(group.name || '').trim();
+		.forEach((group) => {
+			const groupName = String(group.name || '').trim();
+			if (!groupName) return;
 			const monitors = Array.isArray(group.monitorList) ? group.monitorList : [];
 
-			const monitorStatuses = monitors.map((m) => {
+			const statuses = monitors.map((m) => {
 				const beats = heartbeats[String(m.id)] || [];
-				if (!beats.length) return true;
-				return beats[beats.length - 1].status === 1;
+				const last = beats.length ? beats[beats.length - 1] : null;
+				// Comme avant : sans heartbeat on considère le service en ligne, sinon seul le statut 1 compte
+				const up = !last || last.status === 1;
+				const name = String(m.name || '').trim();
+				if (name) {
+					services.push({
+						name,
+						group: groupName,
+						up,
+						latency: last && Number.isFinite(last.ping) ? Math.round(last.ping) : null
+					});
+				}
+				return up;
 			});
 
-			const up = monitorStatuses.length === 0 || monitorStatuses.every(Boolean);
-			return { group: name, up };
-		})
-		.filter((g) => g.group);
+			groups.push({ group: groupName, up: statuses.every(Boolean) });
+		});
+
+	return { groups, services };
 }
 
-let uptimeCache = null;
-let uptimeCacheAt = 0;
+let homelabCache = null;
+let homelabCacheAt = 0;
+let homelabPending = null;
+
+function resetHomelabCache() {
+	homelabCache = null;
+	homelabCacheAt = 0;
+}
+
+// Snapshot partagé (cache 60 s, une seule requête en vol). null si désactivé ou indisponible.
+function getHomelabSnapshot() {
+	if (homelabCache && Date.now() - homelabCacheAt < 60000) return Promise.resolve(homelabCache);
+	if (!parseBoolean(spotifyConfig.HOMELAB_ENABLED)) return Promise.resolve(null);
+	const config = getUptimeKumaConfig();
+	if (!config.hostname) return Promise.resolve(null);
+	if (homelabPending) return homelabPending;
+
+	homelabPending = loadUptimeKumaSnapshot(config)
+		.then((snapshot) => {
+			if (!snapshot.groups.length) return null;
+			homelabCache = snapshot;
+			homelabCacheAt = Date.now();
+			return snapshot;
+		})
+		.catch((e) => {
+			console.error('Uptime Kuma API error:', e.message);
+			return null;
+		})
+		.finally(() => { homelabPending = null; });
+	return homelabPending;
+}
+
+// Pour le rendu serveur : n'attend pas la status page plus de `ms`
+function getHomelabSnapshotWithin(ms) {
+	let timer;
+	return Promise.race([
+		getHomelabSnapshot(),
+		new Promise((resolve) => { timer = setTimeout(() => resolve(null), ms); })
+	]).finally(() => clearTimeout(timer));
+}
 
 app.get('/api/uptime', async (req, res) => {
-	if (uptimeCache && Date.now() - uptimeCacheAt < 60000) return res.json(uptimeCache);
-	try {
-		if (!parseBoolean(spotifyConfig.HOMELAB_ENABLED)) return res.json({ ok: false });
-		const config = getUptimeKumaConfig();
-		if (!config.hostname) return res.json({ ok: false });
+	const snapshot = await getHomelabSnapshot();
+	if (!snapshot) return res.json({ ok: false });
+	res.json({ ok: true, overall: snapshot.groups.every((g) => g.up), groups: snapshot.groups });
+});
 
-		const groups = await loadUptimeKumaGroups(config);
-		if (!groups.length) return res.json({ ok: false });
-
-		const overall = groups.every((g) => g.up);
-		uptimeCache = { ok: true, overall, groups };
-		uptimeCacheAt = Date.now();
-		res.json(uptimeCache);
-	} catch (e) {
-		console.error('Uptime Kuma API error:', e.message);
-		res.json({ ok: false });
-	}
+app.get('/api/infra', async (req, res) => {
+	const snapshot = await getHomelabSnapshot();
+	if (!snapshot) return res.json({ ok: false });
+	res.json({ ok: true, services: snapshot.services });
 });
 
 async function getSpotifyToken() {
@@ -720,14 +769,25 @@ function getHomeProjects(limit) {
 		.slice(0, limit);
 }
 
-app.get('/', (req, res) => res.render('index', {
-	title: 'Olivier D - Accueil',
-	description: 'Étudiant en Bac Pro CIEL futur alternant en BTS SIO SISR. Passionné par les réseaux, administration système et développement web.',
-	url: 'https://www.olivier-dutoit.fr',
-	ogImage: 'https://www.olivier-dutoit.fr/og-image.png',
-	homeProjects: getHomeProjects(3),
-	wide: true
-}));
+app.get('/', async (req, res, next) => {
+	try {
+		const homelabEnabled = parseBoolean(spotifyConfig.HOMELAB_ENABLED);
+		const snapshot = homelabEnabled ? await getHomelabSnapshotWithin(800) : null;
+		res.render('index', {
+			title: 'Olivier D - Accueil',
+			description: 'Étudiant en Bac Pro CIEL futur alternant en BTS SIO SISR. Passionné par les réseaux, administration système et développement web.',
+			url: 'https://www.olivier-dutoit.fr',
+			ogImage: 'https://www.olivier-dutoit.fr/og-image.png',
+			homeProjects: getHomeProjects(3),
+			homelabEnabled,
+			homelabName: String(spotifyConfig.HOMELAB_NAME || 'Homelab').trim() || 'Homelab',
+			infraServices: snapshot ? snapshot.services : null,
+			wide: true
+		});
+	} catch (e) {
+		next(e);
+	}
+});
 
 app.get('/about', (req, res) => res.render('about', { 
 	title: 'Olivier D - À propos',
@@ -968,8 +1028,7 @@ function handleAdminAboutSave(req, res) {
 	try {
 		ghCache = null;
 		ghCacheAt = 0;
-		uptimeCache = null;
-		uptimeCacheAt = 0;
+		resetHomelabCache();
 
 		spotifyConfig = saveAdminConfig({
 			SPOTIFY_ENABLED: parseBoolean(req.body.SPOTIFY_ENABLED),
