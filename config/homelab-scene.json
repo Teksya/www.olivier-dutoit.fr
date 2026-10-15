@@ -7,6 +7,11 @@
   },
   "themes": [
     {
+      "nom": "anniversaire",
+      "du": "09-14",
+      "au": "09-14"
+    },
+    {
       "nom": "halloween",
       "du": "10-20",
       "au": "11-02"

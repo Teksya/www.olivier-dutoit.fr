@@ -117,6 +117,8 @@ Le haut de l'accueil montre mon bureau et ma baie en pixel art, avec Blue, ma ch
 - **Incident** : quand un appareil tombe, Blue va s'asseoir devant la baie et le fixe (une fois par appareil toutes les 10 minutes au plus, jamais pendant le laser).
 - **La nuit**, la sieste sur la baie est plus fréquente.
 - **Laser** : double-clic à la souris, appui long au doigt (l'indice s'affiche sous le bouton Pause).
+- **Blue grandit** : ses proportions suivent son âge (`data-cat-birth` du partial, naissance estimée au 15 août 2026) jusqu'à l'âge adulte, à 12 mois.
+- **Anniversaire d'adoption** (14 septembre, `data-cat-adoption`) : fanions, gâteau avec une bougie par année, chapeau de fête. Plage réglée dans `config/homelab-scene.json`, prioritaire sur Halloween et Noël.
 - **Code Konami** : sur l'accueil, Blue fait la fête (zoomies puis cœurs) ; ailleurs, les confettis. `effects.js` émet un événement `konami` annulable, que le hero intercepte.
 
 ### 🟢 Les vrais états du homelab

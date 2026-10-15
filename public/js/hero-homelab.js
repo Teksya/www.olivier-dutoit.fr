@@ -29,7 +29,8 @@
   var MOBILE_ACTIVITIES = { napSofa: 0, napSun: 0, window: 0, box: 0, roll: 0 };
 
   function options(quality, extra) {
-    var o = { preset: 'portfolio', quality: quality, hour: parisHour() }, k;
+    // birthDate : les proportions de Blue suivent son âge ; adoptionDate : bougies du gâteau d'anniversaire
+    var o = { preset: 'portfolio', quality: quality, hour: parisHour(), birthDate: root.dataset.catBirth, adoptionDate: root.dataset.catAdoption }, k;
     if (small) {
       // Les cadrages passés en option ne sont pas réduits par le moteur : on applique nous-mêmes la qualité
       var f = quality === 'standard' ? 0.5 : 1;
