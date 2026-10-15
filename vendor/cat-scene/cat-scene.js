@@ -14,7 +14,9 @@
     avatar: { width: 256, height: 256, K: 24, OX: -472, OY: 520, scenario: 'avatar', vignette: 'avatar', stillAt: 4300 },
     wallpaper: { width: 960, height: 540, K: 8, OX: 464, OY: 360, scenario: 'live', vignette: 'wallpaper', room: 'large', stillAt: 3000, fps: 30 },
     /* Bandeau 21:9 du grand appartement (baie, bureau, tapis), sans la coupure de la baie par le clavier */
-    portfolio: { width: 960, height: 412, K: 8, OX: 464, OY: 290, scenario: 'live', vignette: 'wallpaper', room: 'large', stillAt: 3000, fps: 30, catFps: 15, activities: { keyboard: 0 }, nightActivities: { napRack: 2.5 } }
+    portfolio: { width: 960, height: 412, K: 8, OX: 464, OY: 290, scenario: 'live', vignette: 'wallpaper', room: 'large', stillAt: 3000, fps: 30, catFps: 15, activities: { keyboard: 0 }, nightActivities: { napRack: 2.5 } },
+    /* Carte du trajet d'une requête : fenêtre sur la maquette, la caméra suit le paquet (setProgress), view: 'full' pour toute la carte */
+    network: { width: 640, height: 720, K: 8, OX: 0, OY: 0, scenario: 'network', stillAt: 3000, fps: 30, catFps: 15, progress: 0 }
   };
 
   /* ================= Apparence de la chatonne : Blue, tachetée bicolore noir et brun, très légères touches rousses ================= */
@@ -1564,6 +1566,7 @@
     /* Ombre portée sur la surface sous le chat */
     var shCv = layer(), shCtx = shCv.getContext('2d');
     function surfAt(x, y) {
+      if (NET) return 0;                                              // carte du trajet : tout se passe au sol
       if (x >= 4 && x <= 16 && y >= -20 && y <= -10) return RACK_TOP;
       if (x >= -12.6 && x <= -9.6 && y >= 0.3 && y <= 11.3) return KB_TOP;
       if (x >= -20 && x <= -8 && y >= -6 && y <= 18) return DESK_TOP;
@@ -2604,21 +2607,453 @@
       return r;
     }
 
+    /* ================= Carte du trajet d'une requête (scénario 'network') =================
+       Maquette de nuit posée sur un socle : la maison du visiteur, un CDN que la route traverse en tunnel,
+       la barrière du reverse proxy à l'entrée de la cour, la baie (celle de la pièce) et un container dont les portes s'ouvrent.
+       Le paquet part de la maison, passe chaque étape, est traité dans le container puis revient en enveloppe ;
+       la caméra le suit et la chatonne lui court après.
+       L'avancement vient de l'extérieur : setProgress(p), de 0 (départ) à 1 (réponse arrivée), repères des étapes dans api.stops.
+       opt.progress : avancement de départ ; opt.view = 'full' : toute la carte, sans caméra (affiches) ;
+       opt.accent : couleur du paquet ; opt.cdnColor : couleur du CDN ; opt.background : fond (transparent sinon). */
+    var NET = opt.scenario === 'network' ? (function () {
+      var ACC = pal(opt.accent || '#0a84ff'), ACC_RGB = hex2rgb(ACC[3]).join(','), CDN_COL = opt.cdnColor || '#f38020', CDN_RGB = hex2rgb(CDN_COL).join(',');
+      var OK = '#22c55e', E = Math.max(1, Math.round(K / 4)), LE = Math.max(1, Math.round(K / 6));   // E : pixel des lutins, LE : voyants
+
+      /* ---------- Plan (unités du monde, comme la pièce) ---------- */
+      var ISLAND = [[-4, -6], [92, -6], [92, 30], [154, 30], [154, 74], [70, 74], [70, 27], [-4, 27]];
+      var HOUSE = { x0: 0, y0: 0, x1: 18, y1: 12, h: 11, ridge: 18 };
+      var CDN = { x0: 40, y0: 10, x1: 62, y1: 26, h: 15 };
+      var RACK_AT = [96, 62];                                          // la baie de la pièce (x 4..16, y -20..-10), décalée ici
+      var GATE = { x: 94, y: 56.2, z: 4.6, len: 8.2 };
+      var CTN = { x0: 118, y0: 44, x1: 142, y1: 53, h: 10, d0: 126, d1: 134 };
+      var ROUTE = [[8.5, 12.6], [8.5, 19], [80, 19], [80, 60], [130, 60], [130, 53.6]];
+
+      /* ---------- Route suivie par le paquet (coins arrondis), abscisse curviligne ---------- */
+      var PTS = [ROUTE[0]], CUM = [0], i, k;
+      for (i = 1; i < ROUTE.length - 1; i++) {
+        var a = ROUTE[i - 1], b = ROUTE[i], c = ROUTE[i + 1], la = dist(a, b), lc = dist(b, c), r = Math.min(4, la / 2, lc / 2);
+        var s0 = [b[0] + (a[0] - b[0]) * r / la, b[1] + (a[1] - b[1]) * r / la], s1 = [b[0] + (c[0] - b[0]) * r / lc, b[1] + (c[1] - b[1]) * r / lc];
+        for (k = 0; k <= 8; k++) PTS.push(bez(s0, b, s1, k / 8));
+      }
+      PTS.push(ROUTE[ROUTE.length - 1]);
+      for (i = 1; i < PTS.length; i++) CUM.push(CUM[i - 1] + dist(PTS[i - 1], PTS[i]));
+      var LEN = CUM[CUM.length - 1];
+      function along(s) {                                              // point de la route à l'abscisse s, et sa direction
+        s = Math.max(0, Math.min(LEN, s));
+        var lo = 0, hi = CUM.length - 1;
+        while (hi - lo > 1) { var m = (lo + hi) >> 1; if (CUM[m] < s) lo = m; else hi = m; }
+        var A = PTS[lo], B = PTS[hi], f = (s - CUM[lo]) / Math.max(1e-6, CUM[hi] - CUM[lo]);
+        return [A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f, Math.atan2(B[1] - A[1], B[0] - A[0])];
+      }
+      function sAt(pt) {                                               // abscisse du point de la route le plus proche
+        var best = 1e9, bs = 0;
+        for (var j = 1; j < PTS.length; j++) {
+          var A = PTS[j - 1], dx = PTS[j][0] - A[0], dy = PTS[j][1] - A[1], l2 = dx * dx + dy * dy || 1e-6;
+          var t = Math.max(0, Math.min(1, ((pt[0] - A[0]) * dx + (pt[1] - A[1]) * dy) / l2));
+          var d = Math.hypot(A[0] + dx * t - pt[0], A[1] + dy * t - pt[1]);
+          if (d < best) { best = d; bs = CUM[j - 1] + t * Math.sqrt(l2); }
+        }
+        return bs;
+      }
+
+      /* ---------- Avancement : aller jusqu'à 0,45, traitement dans le container, retour à partir de 0,55 ---------- */
+      var OUT = 0.45, BACK = 0.55;
+      var S_CDN_IN = sAt([CDN.x0, 19]), S_CDN = sAt([CDN.x1 + 0.6, 19]), S_GATE = sAt([GATE.x, 60]);
+      var STOPS = [
+        { id: 'start', progress: 0 },
+        { id: 'cdn', progress: (S_CDN + 4) / LEN * OUT },
+        { id: 'proxy', progress: (S_GATE + 3) / LEN * OUT },
+        { id: 'app', progress: OUT + 0.02 },                         // le paquet vient d'entrer dans le container
+        { id: 'end', progress: 1 }
+      ];
+      /* Repère « contrôle passé » au-dessus de chaque étape franchie : [avancement, position] */
+      var BADGES = [[STOPS[1].progress, [51, 18, CDN.h + 12.5]], [STOPS[2].progress, [92, 52.7, 11.5]], [OUT + 0.02, [130, 48.5, CTN.h + 4]], [1, [9, 6, HOUSE.ridge + 4.5]]];
+
+      /* Ce qui voyage : le paquet à l'aller, les deux dans le container pendant le traitement, l'enveloppe au retour */
+      function carried(p) {
+        var o = { kind: 'packet', s: 0, dwell: 0 };
+        if (p <= OUT) o.s = LEN * p / OUT;
+        else if (p < BACK) { o.s = LEN; o.kind = 'work'; o.dwell = (p - OUT) / (BACK - OUT); }
+        else { o.s = LEN * (1 - (p - BACK) / (1 - BACK)); o.kind = p >= 0.999 ? 'home' : 'mail'; }
+        var at0 = along(o.s);
+        o.x = at0[0]; o.y = at0[1]; o.h = at0[2];
+        if (o.kind === 'work') o.y -= 1.6;                              // dans l'embrasure du container
+        return o;
+      }
+
+      /* ---------- Décor fixe : un grand calque pour la maquette, un autre pour le CDN (la route passe dessous) ---------- */
+      var PAD = 10, MOX = 0, MOY = 0, MW = 0, MH = 0, L0 = null, LCDN = null, WINS = [];
+      function mapLayer() { var cc = document.createElement('canvas'); cc.width = MW; cc.height = MH; return cc; }
+      function build() {
+        var u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9;
+        function grow(x, y, z) { var u = x - y, v = (x + y) / 2 - z; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+        ISLAND.forEach(function (q) { grow(q[0], q[1], 0); grow(q[0], q[1], -4); });
+        grow(4.5, 3.5, 29); grow(9, 6, HOUSE.ridge + 7);                // fumée de la cheminée, repère au-dessus de la maison
+        MOX = Math.round(-u0 * K + PAD); MOY = Math.round(-v0 * K + PAD);
+        MW = Math.ceil((u1 - u0) * K + 2 * PAD); MH = Math.ceil((v1 - v0) * K + 2 * PAD);
+        var sv = [OX, OY, W, H];
+        OX = MOX; OY = MOY; W = MW; H = MH;
+        L0 = mapLayer(); g = L0.getContext('2d');
+        drawGround(); drawFlat();
+        /* Volumes du fond vers l'avant (x + y croissant) */
+        [[-3.7, function () { pine(-0.5, -3.2, 0.8); }], [15, drawHouse], [20, function () { pine(22, -2, 1); }], [33, function () { pine(28, 5, 0.85); }],
+          [34, function () { pine(34, 0, 1.05); }], [36.4, function () { lamp(22, 14.4); }], [50.4, function () { lamp(36, 14.4); }],
+          [71, function () { pine(68, 3, 1); }], [73, function () { pine(75, -2, 0.8); }], [84.4, function () { lamp(70, 14.4); }],
+          [93, function () { pine(87, 6, 1.1); }], [100, drawFences], [107.4, function () { lamp(75.4, 32); }], [113.6, drawCabinet],
+          [123.4, function () { lamp(75.4, 48); }], [144.7, drawBooth], [153, function () { shift(RACK_AT[0], RACK_AT[1], 0, drawRack); }],
+          [169.4, function () { lamp(114, 55.4); }], [178.5, drawContainer], [202.4, function () { lamp(147, 55.4); }]]
+          .forEach(function (it) { it[1](); });
+        LCDN = mapLayer(); g = LCDN.getContext('2d'); drawCdn();
+        OX = sv[0]; OY = sv[1]; W = sv[2]; H = sv[3];
+        if (opt.view === 'full') { cv.width = W = MW; cv.height = H = MH; shCv.width = W; shCv.height = H; }
+        g = ctx;
+      }
+
+      var EARTH = pal('#2b221a'), GRASS = '#16201c', ASPH = '#111317', CURB = '#2c3138', DASH = '#57513a';
+      function onIsland(x, y) { return (x > -3 && x < 91 && y > -5 && y < 26) || (x > 71 && x < 91 && y > -5 && y < 73) || (x > 71 && x < 153 && y > 31 && y < 73); }
+      function drawGround() {
+        qX(92, -6, 30, -4, 0, EARTH[1]); qX(154, 30, 74, -4, 0, EARTH[1]);
+        qY(27, -4, 70, -4, 0, EARTH[3]); qY(74, 70, 154, -4, 0, EARTH[3]);
+        qX(92.01, -6, 30, -0.8, 0, '#1a2520'); qX(154.01, 30, 74, -0.8, 0, '#1a2520');
+        qY(27.01, -4, 70, -0.8, 0, '#22302a'); qY(74.01, 70, 154, -0.8, 0, '#22302a');
+        flat(ISLAND, 0, GRASS);
+        for (var n = 0; n < 1600; n++) { var x = -4 + rnd() * 158, y = -6 + rnd() * 80; if (onIsland(x, y)) px(P(x, y, 0), rnd() < 0.5 ? '#1c2924' : '#111915', 1); }
+        [[[92, -6], [92, 30]], [[154, 30], [154, 74]], [[154, 74], [70, 74]], [[70, 27], [-4, 27]]].forEach(function (e) { line(P(e[0][0], e[0][1], 0), P(e[1][0], e[1][1], 0), '#25332d'); });
+      }
+      /* Au sol : routes, allée, cour pavée, câble de la baie au container */
+      function drawFlat() {
+        var x, y;
+        qZ(0.01, 6.6, 10.4, 12, 16, '#262a30');
+        qZ(0.01, 5.5, 83, 16, 22, ASPH); qZ(0.01, 77, 83, 16, 63, ASPH); qZ(0.01, 77, 136, 57, 63, ASPH);
+        qZ(0.008, 86, 152, 34, 57, '#1b1e23');
+        for (x = 90; x < 152; x += 4) line(P(x, 34, 0.009), P(x, 57, 0.009), '#202429');
+        for (y = 38; y < 57; y += 4) line(P(86, y, 0.009), P(152, y, 0.009), '#202429');
+        qZ(0.012, 126.5, 133.5, 53, 57, '#23272e');
+        line(P(5.5, 22, 0.02), P(77, 22, 0.02), CURB); line(P(83, 22, 0.02), P(83, 57, 0.02), CURB); line(P(77, 63, 0.02), P(136, 63, 0.02), CURB);
+        line(P(10.4, 16, 0.02), P(83, 16, 0.02), '#0a0b0e'); line(P(77, 22, 0.02), P(77, 57, 0.02), '#0a0b0e'); line(P(83, 57, 0.02), P(126.5, 57, 0.02), '#0a0b0e');
+        for (x = 14; x < 74; x += 4) line(P(x, 19, 0.02), P(x + 2, 19, 0.02), DASH);
+        for (y = 26; y < 54; y += 4) line(P(80, y, 0.02), P(80, y + 2, 0.02), DASH);
+        for (x = 98; x < 124; x += 4) line(P(x, 60, 0.02), P(x + 2, 60, 0.02), DASH);
+        line(P(91.2, 57.4, 0.02), P(91.2, 62.6, 0.02), '#8d9097');       // ligne d'arrêt de la barrière
+        thick(P(112, 47.5, 0.03), P(118, 47.5, 0.03), '#163a60', LE + 1);
+      }
+
+      var WALL = pal('#8b8073'), ROOF = pal('#5b3a33'), LIT = '#f3c46a', LEAF = pal('#1f3c2f');
+      function win(x0, x1, screen) {
+        var y = HOUSE.y1;
+        qY(y + 0.01, x0, x1, 4.6, 8.2, '#2a221d'); qY(y + 0.02, x0 + 0.3, x1 - 0.3, 4.9, 7.9, LIT);
+        if (screen) { qY(y + 0.03, 12.9, 15.1, 5.2, 7.4, '#1a1512'); qY(y + 0.03, 13.8, 14.2, 4.9, 5.2, '#1a1512'); }   // l'écran du visiteur
+        else line(P((x0 + x1) / 2, y + 0.03, 4.9), P((x0 + x1) / 2, y + 0.03, 7.9), '#2a221d');
+        qY(y + 0.01, x0 - 0.2, x1 + 0.2, 4.3, 4.6, '#cfc6b8');
+      }
+      function drawHouse() {
+        var h = HOUSE, ym = (h.y0 + h.y1) / 2, e = 1.2, z0 = h.h - 0.6, t;
+        glow(3.5, 15, 0, 7 * K, 'rgba(243,196,106,0.10)'); glow(14, 15, 0, 7 * K, 'rgba(243,196,106,0.10)');
+        box(h.x0, h.y0, 0, h.x1, h.y1, h.h, WALL);
+        qY(h.y1 + 0.01, h.x0, h.x1, 0, 0.9, shade(WALL[3], -0.35)); qX(h.x1 + 0.01, h.y0, h.y1, 0, 0.9, shade(WALL[1], -0.35));
+        qY(h.y1 + 0.01, 7, 10, 0.9, 6.6, '#3a2a20'); qY(h.y1 + 0.02, 7.3, 9.7, 1.2, 6.3, '#4a3527'); px(P(9.3, h.y1 + 0.03, 3.6), '#c9a25a', E);
+        win(1.8, 5.2); win(12, 16, true);
+        qX(h.x1 + 0.01, 3.5, 8.5, 4.6, 8.2, '#2a221d'); qX(h.x1 + 0.02, 3.8, 8.2, 4.9, 7.9, shade(LIT, -0.15));
+        line(P(h.x1 + 0.03, 6, 4.9), P(h.x1 + 0.03, 6, 7.9), '#2a221d');
+        /* Toit à deux pans (faîtage parallèle à x) : pan arrière, cheminée, pignon, pan avant */
+        fillPoly([P(h.x0 - e, h.y0 - e, z0), P(h.x1 + e, h.y0 - e, z0), P(h.x1 + e, ym, h.ridge), P(h.x0 - e, ym, h.ridge)], ROOF[1]);
+        box(3, 2.4, 12, 5.6, 5, 20, pal('#6e4b3d')); qZ(20.01, 3.4, 5.2, 2.8, 4.6, '#1a1210');
+        fillPoly([P(h.x1, h.y0, h.h), P(h.x1, h.y1, h.h), P(h.x1, ym, h.ridge - 0.9)], WALL[1]);
+        fillPoly([P(h.x0 - e, h.y1 + e, z0), P(h.x1 + e, h.y1 + e, z0), P(h.x1 + e, ym, h.ridge), P(h.x0 - e, ym, h.ridge)], ROOF[4]);
+        for (k = 1; k < 6; k++) {
+          t = k / 6;
+          var yy = h.y1 + e + (ym - h.y1 - e) * t, zz = z0 + (h.ridge - z0) * t;
+          line(P(h.x0 - e, yy, zz), P(h.x1 + e, yy, zz), ROOF[2]);
+        }
+        line(P(h.x1 + e, h.y1 + e, z0), P(h.x1 + e, ym, h.ridge), ROOF[0]);
+        line(P(h.x0 - e, ym, h.ridge), P(h.x1 + e, ym, h.ridge), ROOF[5]);
+      }
+      function pine(x, y, s) {
+        cyl(x, y, 0, 1.4 * s, 0.4 * s, WOOD);
+        loft(circle(x, y, 2.8 * s, 12), circle(x, y, 0.5 * s, 12), 1.2 * s, 5.4 * s, LEAF);
+        loft(circle(x, y, 2.2 * s, 12), circle(x, y, 0.4 * s, 12), 4.0 * s, 7.8 * s, LEAF);
+        loft(circle(x, y, 1.5 * s, 12), circle(x, y, 0.1 * s, 12), 6.4 * s, 9.8 * s, LEAF);
+      }
+      function lamp(x, y) {
+        glow(x, y + 1, 0, 7 * K, 'rgba(255,214,140,0.08)');
+        box(x - 0.25, y - 0.25, 0, x + 0.25, y + 0.25, 8.6, METAL);
+        box(x - 0.8, y - 0.8, 8.6, x + 0.8, y + 0.8, 9.2, METAL, '#2a2f36');
+        px(P(x, y, 8.5), '#ffe2a0', E);
+        glow(x, y, 8.4, 3 * K, 'rgba(255,214,140,0.3)');
+      }
+      function drawCabinet() { box(72.2, 38.5, 0, 75, 41.5, 4.6, METAL); px(P(75.01, 39.4, 3.8), '#f2b33d', LE); }   // armoire fibre
+      function drawFences() {
+        var F = '#3a4048', x, y;
+        for (x = 86; x <= 152; x += 3) box(x - 0.2, 33.8, 0, x + 0.2, 34.2, 3.2, METAL);
+        line(P(86, 34, 2.8), P(152, 34, 2.8), F); line(P(86, 34, 1.4), P(152, 34, 1.4), F);
+        for (y = 37; y <= 49; y += 3) box(85.8, y - 0.2, 0, 86.2, y + 0.2, 3.2, METAL);
+        line(P(86, 34, 2.8), P(86, 49, 2.8), F); line(P(86, 34, 1.4), P(86, 49, 1.4), F);
+      }
+      var BOOTH = pal('#80868f');
+      function drawBooth() {
+        box(90, 50, 0, 94, 55.4, 7, BOOTH);
+        qY(55.41, 90.6, 93.4, 3.4, 6.2, '#14222f'); qX(94.01, 50.8, 54.6, 3.4, 6.2, '#14222f');
+        line(P(90.6, 55.42, 6.2), P(93.4, 55.42, 6.2), '#9aa6b4');
+        box(89.4, 49.4, 7, 94.6, 56, 7.7, METAL, '#2b3037');
+        box(93.4, 55.6, 0, 94.6, 56.8, 5.4, pal('#5d6470'));                // pied de la barrière
+        box(93.7, 63.8, 0, 94.3, 64.4, 4.2, METAL);                          // appui, de l'autre côté de la route
+      }
+      var CT = pal('#2e6aa6');
+      function drawContainer() {
+        var c = CTN, x, y;
+        box(c.x0, c.y0, 0, c.x1, c.y1, 0.35, METAL);
+        box(c.x0, c.y0, 0.35, c.x1, c.y1, c.h, CT);
+        for (x = c.x0 + 0.7; x < c.x1 - 0.4; x += 1.1) if (x < c.d0 - 0.4 || x > c.d1 + 0.4) line(P(x, c.y1 + 0.01, 0.9), P(x, c.y1 + 0.01, c.h - 0.5), CT[2]);
+        for (y = c.y0 + 0.7; y < c.y1 - 0.4; y += 1.1) line(P(c.x1 + 0.01, y, 0.9), P(c.x1 + 0.01, y, c.h - 0.5), CT[0]);
+        qY(c.y1 + 0.01, c.x0, c.x1, 0.35, 0.9, CT[1]); qX(c.x1 + 0.01, c.y0, c.y1, 0.35, 0.9, CT[0]);
+        line(P(c.x0, c.y1, c.h), P(c.x1, c.y1, c.h), CT[5]); line(P(c.x1, c.y1, c.h), P(c.x1, c.y0, c.h), CT[4]);
+        line(P(c.x1, c.y1, 0.35), P(c.x1, c.y1, c.h), CT[5]);
+        qY(c.y1 + 0.012, c.d0, c.d1, 0.9, c.h - 0.6, '#05070a');            // embrasure (les portes sont dessinées à chaque image)
+      }
+      var CWALL = pal('#4b525c');
+      function drawCdn() {
+        var c = CDN, x, y, z;
+        box(c.x0, c.y0, 0, c.x1, c.y1, c.h, CWALL);
+        qZ(c.h + 0.01, c.x0 + 0.7, c.x1 - 0.7, c.y0 + 0.7, c.y1 - 0.7, shade(CWALL[5], -0.4));
+        qY(c.y1 + 0.01, c.x0, c.x1, c.h - 2.3, c.h - 1.3, CDN_COL); qX(c.x1 + 0.01, c.y0, c.y1, c.h - 2.3, c.h - 1.3, shade(CDN_COL, -0.3));
+        WINS = [];
+        for (z = 2.2; z < c.h - 4.5; z += 3.4) for (x = c.x0 + 1.4; x < c.x1 - 2; x += 2.6) { qY(c.y1 + 0.01, x, x + 1.7, z, z + 2.2, '#0d151f'); WINS.push([x, z, 0]); }
+        for (y = c.y0 + 1.2; y < c.y1 - 2; y += 2.6) { qX(c.x1 + 0.01, y, y + 1.7, 10.2, 12.2, '#0d151f'); WINS.push([y, 10.2, 1]); }
+        /* Tunnel de la route, sur la face +x */
+        qX(c.x1 + 0.01, 15.6, 22.4, 0, 5.2, '#2a2e35'); discX(c.x1 + 0.01, 19, 5.2, 3.4, '#2a2e35');
+        qX(c.x1 + 0.02, 16.0, 22.0, 0, 5.2, '#06070a'); discX(c.x1 + 0.02, 19, 5.2, 3.0, '#06070a');
+        for (y = 16.8; y < 21.6; y += 1.2) px(P(c.x1 + 0.03, y, 7.4), '#ffd8a0', LE);
+        /* Toit : groupes froids, antenne, enseigne en forme de nuage face à la route */
+        box(42.5, 11.5, c.h, 46, 14.5, c.h + 1.8, METAL); flat(circle(44.25, 13, 1.1, 10), c.h + 1.81, '#0b0c0f');
+        box(56.5, 20.5, c.h, 60, 23.5, c.h + 1.6, METAL); flat(circle(58.25, 22, 1.0, 10), c.h + 1.61, '#0b0c0f');
+        box(59, 11.5, c.h, 59.4, 11.9, c.h + 6, METAL); px(P(59.2, 11.7, c.h + 6.2), '#ef4444', LE);
+        cloudSign(51, 18, c.h);
+      }
+      function cloudSign(xc, Y, z0) {
+        var zb = z0 + 2, lobes = [[-5.8, 1.6, 1.6], [-3.0, 2.6, 2.5], [1.4, 3.4, 3.2], [5.2, 2.2, 2.2], [7.2, 1.3, 1.3]];
+        glow(xc + 0.7, Y, zb + 3, 10 * K, 'rgba(' + CDN_RGB + ',0.16)');
+        box(xc - 5, Y - 0.3, z0, xc - 4.4, Y + 0.3, zb + 0.5, METAL); box(xc + 4.4, Y - 0.3, z0, xc + 5, Y + 0.3, zb + 0.5, METAL);
+        function shape(Yp, col) {
+          qY(Yp, xc - 5.8, xc + 7.2, zb, zb + 1.6, col);
+          lobes.forEach(function (l) { discY(Yp, xc + l[0], zb + l[1], l[2], col); });
+        }
+        shape(Y - 0.7, shade(CDN_COL, -0.45));
+        shape(Y, CDN_COL);
+        lobes.forEach(function (l) { discY(Y + 0.01, xc + l[0] - l[2] * 0.25, zb + l[1] + l[2] * 0.3, l[2] * 0.5, shade(CDN_COL, 0.25)); });
+      }
+
+      /* ---------- Éléments animés ---------- */
+      var MAIL = ['ddddddddddd', 'dLwwwwwwwLd', 'dwLwwwwwLwd', 'dwwLwwwLwwd', 'dwwwLwLwwwd', 'dwwwwLwwwwd', 'dwwwwwwwwwd', 'ddddddddddd'];
+      var CHECK = ['..ggggg..', '.ggggggg.', 'gggggggWg', 'ggggggWgg', 'gWgggWggg', 'ggWgWgggg', 'gggWggggg', '.ggggggg.', '..ggggg..'];
+      var SPR = { d: '#1b2230', w: '#eef2f7', L: '#9aa6b4', g: OK, W: '#f0fdf4' };
+      function sprite(rows, cx, cy, e) {
+        var w = rows[0].length, h = rows.length, x0 = Math.round(cx - w * e / 2), y0 = Math.round(cy - h * e / 2);
+        for (var rr = 0; rr < h; rr++) for (var cc = 0; cc < w; cc++) { var col = SPR[rows[rr][cc]]; if (col) { g.fillStyle = col; g.fillRect(x0 + cc * e, y0 + rr * e, e, e); } }
+      }
+      function drawHouseLife(t, o) {
+        var y = HOUSE.y1 + 0.04, home = o.kind === 'home';
+        qY(y, 13.1, 14.9, 5.5, 7.1, home ? '#e9eef5' : hash(1, Math.floor(t / 900)) > 0.5 ? '#1d4f86' : '#1a477a');
+        if (home) {                                                     // la page s'affiche chez le visiteur
+          qY(y + 0.01, 13.1, 14.9, 6.7, 7.1, ACC[3]);
+          line(P(13.4, y + 0.01, 6.2), P(14.6, y + 0.01, 6.2), '#9aa6b4'); line(P(13.4, y + 0.01, 5.8), P(14.2, y + 0.01, 5.8), '#9aa6b4');
+          glow(14, y, 6.3, 3 * K, 'rgba(233,238,245,0.25)');
+        }
+        for (var n = 0; n < 5; n++) {                                   // fumée de la cheminée
+          var life = (t / 2800 + n / 5) % 1, sz = Math.round(E * (1 + life * 1.5));
+          var q = P(4.3 + life * 1.8 + Math.sin(t / 700 + n) * 0.3, 3.7 - life * 0.6, 20.4 + life * 7);
+          g.globalAlpha = 0.3 * (1 - life); g.fillStyle = '#8e959f'; g.fillRect(Math.round(q[0]), Math.round(q[1]), sz, sz);
+        }
+        g.globalAlpha = 1;
+      }
+      function drawCdnLife(t, o) {
+        WINS.forEach(function (wn, n) {
+          for (var j = 0; j < 2; j++) {
+            var on = hash(n * 2 + j, Math.floor(t / 520 + n * 0.37 + j * 0.5)) > 0.45, col = on ? '#5aa9ff' : '#1d3a57';
+            px(wn[2] ? P(CDN.x1 + 0.02, wn[0] + 0.5 + j * 0.6, wn[1] + 1.1) : P(wn[0] + 0.5 + j * 0.6, CDN.y1 + 0.02, wn[1] + 1.1), col, LE);
+          }
+        });
+        if (o.kind !== 'work' && o.s > S_CDN_IN - 2 && o.s < S_CDN + 2)  // le paquet est contrôlé : l'enseigne s'illumine
+          glow(51.7, 18, CDN.h + 5, 9 * K, 'rgba(' + CDN_RGB + ',' + (0.2 + 0.1 * Math.sin(t / 120)).toFixed(3) + ')');
+      }
+      function drawCable(t, busy) {
+        if (!busy) return;
+        for (var n = 0; n < 3; n++) { var f = (t / 500 + n / 3) % 1; px(P(112.2 + f * 5.6, 47.5, 0.06), ACC[5], E); }
+      }
+      function drawBoothLight(open) {
+        var c = P(92, 52.7, 7.75), on = open > 0.5;
+        glow(92, 52.7, 8.2, 2.2 * K, on ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)');
+        px([c[0] - E / 2, c[1] - E], on ? OK : '#ef4444', E);
+      }
+      function panel(hx, hy, ex, ey, z0, z1) {                          // battant de porte, ombré selon son orientation
+        var dx = ex - hx, dy = ey - hy, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+        if (nx + ny < 0) { nx = -nx; ny = -ny; }
+        var col = CT[Math.round((ny - nx + 1.4143) / 2.8286 * (CT.length - 2))];
+        fillPoly([P(hx, hy, z0), P(ex, ey, z0), P(ex, ey, z1), P(hx, hy, z1)], col);
+        for (var n = 1; n < 3; n++) line(P(hx + dx * n / 3, hy + dy * n / 3, z0 + 0.4), P(hx + dx * n / 3, hy + dy * n / 3, z1 - 0.4), shade(col, -0.3));
+        line(P(hx, hy, z1), P(ex, ey, z1), shade(col, 0.2));
+      }
+      function drawDoors(open, t, o) {
+        var c = CTN, y = c.y1 + 0.02, w = (c.d1 - c.d0) / 2, z0 = 0.9, z1 = c.h - 0.6, th = open * 1.75;
+        if (open > 0.02) {                                              // intérieur éclairé
+          var a2 = open * (o.kind === 'work' ? 0.88 + 0.12 * Math.sin(t / 90) : 1);
+          qY(y - 0.005, c.d0 + 0.1, c.d1 - 0.1, z0, z1, hexMix('#05070a', '#3a2a14', a2));
+          qY(y - 0.004, c.d0 + 0.8, c.d1 - 0.8, z1 - 1.0, z1 - 0.6, hexMix('#05070a', '#ffd27a', a2));
+          glow((c.d0 + c.d1) / 2, c.y1 + 3, 0.1, 9 * K, 'rgba(255,205,130,' + (0.22 * a2).toFixed(3) + ')');
+        }
+        panel(c.d0, y, c.d0 + w * Math.cos(th), y + w * Math.sin(th), z0, z1);
+        panel(c.d1, y, c.d1 - w * Math.cos(th), y + w * Math.sin(th), z0, z1);
+      }
+      function drawArm(open) {                                          // barrière rayée qui se lève
+        var th = open * 1.38, n = 8, w = LE;
+        for (var j = 0; j < n; j++) {
+          var a0 = j / n * GATE.len, a1 = (j + 1) / n * GATE.len, col = j % 2 ? '#e8ecf1' : '#d8433b';
+          var p0 = P(GATE.x, GATE.y + a0 * Math.cos(th), GATE.z + a0 * Math.sin(th)), p1 = P(GATE.x, GATE.y + a1 * Math.cos(th), GATE.z + a1 * Math.sin(th));
+          for (var d = 0; d <= w; d++) { line([p0[0] + d, p0[1]], [p1[0] + d, p1[1]], col); line([p0[0], p0[1] + d], [p1[0], p1[1] + d], col); }
+        }
+      }
+      var SPEED = 0;
+      function drawCarried(o, t) {
+        if (o.kind === 'home') return;
+        var bob = Math.sin(t / 260) * 0.3, mv = Math.min(1, SPEED * 40), n, a2;
+        if (o.kind === 'packet' || (o.kind === 'work' && o.dwell < 0.8)) {
+          var sc = o.kind === 'work' ? 1 - ss(0.55, 0.8, o.dwell) : 1;   // traité au milieu du séjour, puis remplacé par l'enveloppe
+          for (n = 1; n <= 5 && o.kind === 'packet' && mv > 0.05; n++) {   // traînée
+            a2 = along(o.s - n * 1.3); g.globalAlpha = mv * 0.55 * (1 - n / 6); px(P(a2[0], a2[1], 3.6 + bob), ACC[5], E);
+          }
+          g.globalAlpha = 1;
+          if (sc > 0.02) {
+            glow(o.x, o.y, 3.6 + bob, 3.2 * K * sc, 'rgba(' + ACC_RGB + ',0.4)');
+            var rr = 0.85 * sc; box(o.x - rr, o.y - rr, 2.8 + bob, o.x + rr, o.y + rr, 2.8 + bob + 2 * rr, ACC);
+          }
+        }
+        if (o.kind === 'mail' || (o.kind === 'work' && o.dwell >= 0.65)) {
+          for (n = 1; n <= 5 && o.kind === 'mail' && mv > 0.05; n++) {
+            a2 = along(o.s + n * 1.3); g.globalAlpha = mv * 0.5 * (1 - n / 6); px(P(a2[0], a2[1], 3.6 + bob), '#dfe6ee', E);
+          }
+          g.globalAlpha = o.kind === 'work' ? ss(0.65, 0.95, o.dwell) : 1;
+          glow(o.x, o.y, 3.6 + bob, 2.6 * K, 'rgba(233,238,245,0.22)');
+          var c = P(o.x, o.y, 3.6 + bob); sprite(MAIL, c[0], c[1], E);
+        }
+        if (o.kind === 'work') for (n = 0; n < 6; n++) {                 // étincelles du traitement
+          var ang = t / 300 + n * 1.047, rad = 1.6 + 0.6 * Math.sin(t / 150 + n);
+          g.globalAlpha = 0.5 + 0.5 * Math.sin(t / 80 + n * 2);
+          px(P(o.x + Math.cos(ang) * rad, o.y, 3.6 + Math.sin(ang) * rad), n % 2 ? '#ffd27a' : ACC[5], E);
+        }
+        g.globalAlpha = 1;
+      }
+      function drawChecks(p, t) {
+        BADGES.forEach(function (bd, n) {
+          if (p < bd[0] - 1e-4) return;
+          var c = P(bd[1][0], bd[1][1], bd[1][2] + Math.sin(t / 500 + n) * 0.25);
+          sprite(CHECK, c[0], c[1], E);
+        });
+      }
+
+      /* ---------- La chatonne suit ce qui voyage, à quelques pas derrière ---------- */
+      var C = null, catLast = null, catMs = -1e9, catBox = null, catCam = [0, 0];
+      function catGoal(o) { return o.kind === 'mail' || o.kind === 'home' ? Math.min(LEN - 8, o.s + 7) : Math.max(11, Math.min(LEN - 8, o.s - 7)); }
+      function stepCat(o, dt, snap) {
+        var goal = catGoal(o);
+        if (snap || !C) C = { s: goal, v: 0, m: 0, ph: 0, h: null };
+        else {
+          var vd = Math.max(-24, Math.min(24, (goal - C.s) * 3)), amax = 60 * dt / 1000;
+          C.v += Math.max(-amax, Math.min(amax, vd - C.v));
+          C.s = Math.max(0, Math.min(LEN, C.s + C.v * dt / 1000));
+          C.ph += Math.abs(C.v) * dt / 1000 * 1.6;
+          C.m += ((Math.abs(C.v) > 2.5 ? 1 : 0) - C.m) * (1 - Math.exp(-dt / 160));
+        }
+        var a2 = along(C.s), x = a2[0] - Math.sin(a2[2]) * 1.8, y = a2[1] + Math.cos(a2[2]) * 1.8;   // un peu sur le côté de la route
+        var ht = Math.abs(C.v) > 1.2 ? a2[2] + (C.v < 0 ? Math.PI : 0) : o.kind === 'home' ? Math.atan2(HOUSE.y1 - y, 8.5 - x) : Math.atan2(o.y - y, o.x - x);
+        C.h = C.h === null ? ht : angLerp(C.h, ht, 1 - Math.exp(-dt / 110));
+        C.x = x; C.y = y;
+        return at(mixP(WATCH, RUN, C.m), x, y, 0, C.h, C.ph);
+      }
+      /* opt.catFps : entre deux calculs, l'image précédente est reprise, décalée si la caméra a bougé */
+      function drawCatNet(q, t) {
+        var fresh = !opt.catFps || !catLast || t - catMs >= 1000 / opt.catFps - 1 || t < catMs;
+        var cat = fresh ? buildCat(q, t) : catLast, bx = catBox;
+        drawCatShadow(cat);
+        if (fresh) { bx = catBox = renderCat(cat); catLast = cat; catMs = t; catCam = [camX, camY]; }
+        else if (catBox) {
+          bx = { x0: catBox.x0 + catCam[0] - camX, y0: catBox.y0 + catCam[1] - camY, w: catBox.w, h: catBox.h };
+          ctx.drawImage(catCv, 0, 0, bx.w, bx.h, bx.x0, bx.y0, bx.w, bx.h);
+        }
+        drawFace(cat, bx);
+        lastBox = bx;
+      }
+
+      /* ---------- Caméra : suit le paquet (et un peu la chatonne), sans sortir de la carte ---------- */
+      var camX = 0, camY = 0, camFX = 0, camFY = 0, camOn = false;
+      function aim(o, dt, snap) {
+        if (opt.view === 'full') { camX = camY = 0; return; }
+        var fx = o.x * 0.75 + C.x * 0.25, fy = o.y * 0.75 + C.y * 0.25;
+        var tx = MOX + (fx - fy) * K - W / 2, ty = MOY + ((fx + fy) / 2 - 3) * K - H * 0.56;   // un peu sous le centre : place pour les repères au-dessus
+        tx = MW <= W ? (MW - W) / 2 : Math.max(0, Math.min(MW - W, tx));
+        ty = MH <= H ? (MH - H) / 2 : Math.max(0, Math.min(MH - H, ty));
+        if (snap || !camOn) { camFX = tx; camFY = ty; camOn = true; }
+        else { var f = 1 - Math.exp(-dt / 240); camFX += (tx - camFX) * f; camFY += (ty - camFY) * f; }
+        camX = Math.round(camFX); camY = Math.round(camFY);
+      }
+
+      /* ---------- Image ---------- */
+      var PT = Math.max(0, Math.min(1, opt.progress || 0)), PC = PT, lastMs = -1, ARM = 0, DOOR = 0;
+      function frame(ms) {
+        var snap = lastMs < 0 || ms < lastMs, dt = snap ? 0 : Math.min(100, ms - lastMs), p0 = PC;
+        lastMs = ms;
+        if (snap) PC = PT;
+        else { PC += (PT - PC) * (1 - Math.exp(-dt / 150)); if (Math.abs(PT - PC) < 1e-4) PC = PT; }
+        SPEED = dt ? Math.abs(PC - p0) / dt * 16 : 0;
+        var o = carried(PC), q = stepCat(o, dt, snap);
+        aim(o, dt, snap);
+        var armT = 1 - ss(5, 13, Math.abs(o.s - S_GATE)), doorT = o.s > LEN - 12 ? 1 : 0;
+        if (snap) { ARM = armT; DOOR = doorT; }
+        else { ARM += (armT - ARM) * (1 - Math.exp(-dt / 160)); DOOR += (doorT - DOOR) * (1 - Math.exp(-dt / 200)); }
+
+        g = ctx;
+        ctx.clearRect(0, 0, W, H);
+        if (opt.background) { ctx.fillStyle = opt.background; ctx.fillRect(0, 0, W, H); }
+        ctx.drawImage(L0, -camX, -camY);
+        var ox = OX, oy = OY, busy = o.kind === 'work';
+        OX = MOX - camX; OY = MOY - camY;
+        drawHouseLife(ms, o);
+        shift(RACK_AT[0], RACK_AT[1], 0, function () { drawLeds({ t: busy ? ms * 3 : ms, power: 1 }); drawGlass(); });   // la baie s'active pendant le traitement
+        drawCable(ms, busy);
+        drawBoothLight(ARM);
+        drawDoors(DOOR, ms, o);
+        /* Ordre de profondeur le long de la route : ce qui est avant le CDN passe dessous, avant la barrière passe derrière */
+        [{ k: S_CDN, f: function () { ctx.drawImage(LCDN, -camX, -camY); drawCdnLife(ms, o); } },
+          { k: S_GATE, f: function () { drawArm(ARM); } },
+          { k: o.s, f: function () { drawCarried(o, ms); } },
+          { k: C.s - 0.01, f: function () { drawCatNet(q, ms); } }]
+          .sort(function (x, y) { return x.k - y.k; })
+          .forEach(function (it) { it.f(); });
+        drawChecks(PC, ms);
+        OX = ox; OY = oy;
+        api.state = { progress: PC };
+      }
+
+      return { build: build, frame: frame, stops: STOPS, set: function (p) { PT = Math.max(0, Math.min(1, +p || 0)); }, progress: function () { return PC; } };
+    })() : null;
+
     /* ================= Assemblage ================= */
     var bg = layer(), glass = layer(), vig = layer(), fg = layer();
-    g = bg.getContext('2d'); drawRoom(); drawDesk(); drawRack(); drawPlant();
-    if (HW) { pumpkin(PUMPKINS[3]); pumpkin(PUMPKINS[0]); pumpkin(PUMPKINS[2]); candle(); drawHalloweenStatic(); }
-    if (XM) drawChristmasStatic();
-    if (AN) drawAnniversaryStatic();
-    if (LARGE) { g = bg.getContext('2d'); drawCouch(); drawSill(); drawBoxBack(); }
-    g = fg.getContext('2d'); drawChair();
-    g = glass.getContext('2d'); drawGlass();
-    g = vig.getContext('2d'); drawVignette();
+    if (NET) NET.build();
+    else {
+      g = bg.getContext('2d'); drawRoom(); drawDesk(); drawRack(); drawPlant();
+      if (HW) { pumpkin(PUMPKINS[3]); pumpkin(PUMPKINS[0]); pumpkin(PUMPKINS[2]); candle(); drawHalloweenStatic(); }
+      if (XM) drawChristmasStatic();
+      if (AN) drawAnniversaryStatic();
+      if (LARGE) { g = bg.getContext('2d'); drawCouch(); drawSill(); drawBoxBack(); }
+      g = fg.getContext('2d'); drawChair();
+      g = glass.getContext('2d'); drawGlass();
+      g = vig.getContext('2d'); drawVignette();
+    }
     g = ctx;
 
     /* opt.catFps : la chatonne (le plus coûteux) est recalculée à ce rythme et réaffichée telle quelle entre deux calculs */
     var lastCat = null, lastCatMs = -1e9;
     function frame(ms) {
+      if (NET) { NET.frame(ms); return; }
       var hour = timeOfDay(ms);
       clockMs = ms;
       if (LIVE) { updateWeather(ms); readInput(); }
@@ -2702,7 +3137,9 @@
       getHotspots: getHotspots, play: function (name) { return LIVE ? LIVE.play(name) : false; },
       activity: function () { return LIVE ? LIVE.activity() : null; },   // activité en cours (vie autonome), pour un texte alternatif
       canvas: cv, state: null, setWeather: setWeather, setStatus: setStatus, setScreenText: setScreenText, pointer: pointer, pointerLeave: pointerLeave,
-      toggleLaser: toggleLaser, set: function (k, v) { opt[k] = v; } };
+      toggleLaser: toggleLaser, set: function (k, v) { opt[k] = v; },
+      /* Carte du trajet (scénario 'network') : avancement de 0 à 1 et repères des étapes */
+      setProgress: function (p) { if (NET) NET.set(p); }, progress: function () { return NET ? NET.progress() : null; }, stops: NET ? NET.stops : null };
     if (opt.autoplay !== false) {
       var reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (reduce) frame(opt.stillAt); else start();

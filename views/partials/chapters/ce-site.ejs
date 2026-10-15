@@ -1,7 +1,11 @@
 <%#
   Chapitre « Comment ce site est servi » : le trajet d'une requête, étape par étape.
-  Animation (chemin tracé au scroll, paquet lumineux, étapes qui passent au vert) : public/js/request-flow.js.
-  Sans JS ou en mouvement réduit : toutes les étapes sont affichées, validées.
+  À côté des étapes (au-dessus en mobile), une carte pixel art du trajet reste collée pendant le défilement :
+  le moteur cat-abw-iso3d-webanim (préréglage network) y fait avancer un paquet de la maison du visiteur
+  jusqu'au container, puis revenir une enveloppe ; Blue lui court après. Pilotage : public/js/request-flow.js,
+  chaque étape est calée sur un repère du moteur (data-stop).
+  Sans JS ou en mouvement réduit : affiche de la carte entière, toutes les étapes affichées, validées.
+  La carte est décorative : tout ce qu'elle montre est dit par les étapes texte.
   Le vert est réservé à cette section.
 
   Les contrôles marqués « verifie: false » sont rédigés de façon générique, sans relevé de la configuration
@@ -9,26 +13,26 @@
 %>
 <%
   const steps = [
-    { titre: 'Votre navigateur', role: 'Demande la page.', controles: [
+    { stop: 'start', titre: 'Votre navigateur', role: 'Demande la page.', controles: [
       { texte: 'Connexion chiffrée en HTTPS', verifie: false },
       { texte: 'Aucun traceur publicitaire ni outil de mesure d\'audience', verifie: true },
       { texte: 'Animations coupées si vous avez demandé moins de mouvement', verifie: true }
     ] },
-    { titre: 'Cloudflare', role: 'Reçoit la requête en premier, devant mon serveur.', controles: [
+    { stop: 'cdn', titre: 'Cloudflare', role: 'Reçoit la requête en premier, devant mon serveur.', controles: [
       { texte: 'Certificat TLS et chiffrement jusqu\'à mon serveur', verifie: false },
       { texte: 'Absorbe les attaques par saturation avant qu\'elles n\'arrivent chez moi', verifie: false },
       { texte: 'Anti-robot Turnstile sur le formulaire de contact', verifie: true }
     ] },
-    { titre: 'Reverse proxy', role: 'Seule porte d\'entrée du serveur.', controles: [
+    { stop: 'proxy', titre: 'Reverse proxy', role: 'Seule porte d\'entrée du serveur.', controles: [
       { texte: 'Redirige tout le trafic HTTP vers HTTPS', verifie: false },
       { texte: 'Transmet la requête au bon container, rien d\'autre n\'est exposé', verifie: false }
     ] },
-    { titre: 'Container Express', role: 'Le site lui-même : Node.js, Express et EJS.', controles: [
+    { stop: 'app', titre: 'Container Express', role: 'Le site lui-même : Node.js, Express et EJS.', controles: [
       { texte: 'Session admin signée (HMAC), cookie HttpOnly et SameSite', verifie: true },
       { texte: 'API publiques en liste blanche : ni IP, ni hostname, ni URL interne', verifie: true },
       { texte: 'Formulaire vérifié côté serveur, contenu échappé avant l\'envoi', verifie: true }
     ] },
-    { titre: 'La réponse', role: 'Revient par le même chemin, jusqu\'à vous.', controles: [
+    { stop: 'end', titre: 'La réponse', role: 'Revient par le même chemin, jusqu\'à vous.', controles: [
       { texte: 'Page rendue par le serveur, lisible même sans JavaScript', verifie: true },
       { texte: 'Fichiers versionnés, mis en cache 30 jours par votre navigateur', verifie: true },
       { texte: 'Scène animée chargée seulement si votre machine suit', verifie: true }
@@ -36,16 +40,23 @@
   ];
   const check = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 %>
-<div class="flow reveal" data-flow>
-  <svg class="flow__path" data-flow-path aria-hidden="true" focusable="false">
-    <path class="flow__track" data-flow-track d=""/>
-    <path class="flow__trace" data-flow-trace d=""/>
-  </svg>
-  <span class="flow__packet" data-flow-packet aria-hidden="true"></span>
+<div class="flow reveal" data-flow data-engine="/vendor/cat-scene/cat-scene.js?v=<%= catSceneVersion %>" data-cat-birth="2026-08-15">
+  <div class="flow__map" data-flow-map>
+    <div class="flow__frame" data-flow-frame aria-hidden="true">
+      <img class="flow__poster" src="/vendor/cat-scene/network-sd.png?v=<%= catSceneVersion %>"
+        srcset="/vendor/cat-scene/network-sd.png?v=<%= catSceneVersion %> 640w, /vendor/cat-scene/network.png?v=<%= catSceneVersion %> 1260w"
+        sizes="(min-width: 64rem) 30rem, 100vw" width="1260" height="1164" alt="" loading="lazy" decoding="async">
+      <canvas class="flow__canvas" data-flow-canvas></canvas>
+    </div>
+    <button type="button" class="flow__pause" data-flow-pause aria-pressed="false" aria-label="Mettre la carte en pause" hidden>
+      <svg class="flow__pause-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>
+      <svg class="flow__play-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+  </div>
 
   <ol class="flow__steps">
     <% steps.forEach(function (s, i) { %>
-      <li class="flow__step" data-flow-step>
+      <li class="flow__step" data-flow-step data-stop="<%= s.stop %>">
         <span class="flow__node" data-flow-node aria-hidden="true"><%- check %></span>
         <div class="flow__card card">
           <p class="font-mono text-xs text-muted"><%= String(i + 1).padStart(2, '0') %></p>

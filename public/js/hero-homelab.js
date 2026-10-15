@@ -297,6 +297,7 @@
 
     // Blue : infobulle avec son âge ; au doigt, un tap l'épingle
     catBtn = button('cat', function () { pinned = !pinned; if (pinned) showTip(catBtn); else hideTip(); });
+    catBtn.classList.add('hero__hotspot--cat');
     function catLabel() { return root.dataset.catName + ' · ' + catAge(); }
     catBtn.setAttribute('aria-label', catLabel());
 

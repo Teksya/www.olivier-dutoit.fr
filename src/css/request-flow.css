@@ -1,7 +1,8 @@
 /* ═══════════════════════════════════════════════════
    Chapitre « Comment ce site est servi » : trajet d'une requête
-   Animation pilotée par public/js/request-flow.js (classe .is-live).
-   Sans JS ou en mouvement réduit : toutes les étapes affichées, validées.
+   Carte pixel art collée à côté des étapes (au-dessus en mobile), pilotée par public/js/request-flow.js
+   (classe .is-live, puis .is-map-live quand le canvas tourne).
+   Sans JS ou en mouvement réduit : affiche de la carte entière, toutes les étapes validées.
    Le vert (#22c55e) reste dans cette section : chaque contrôle passé.
    ═══════════════════════════════════════════════════ */
 
@@ -13,14 +14,74 @@
 
 .flow {
   --flow-green: #22c55e;
-  --flow-col: 2.5rem;              /* colonne du chemin et des nœuds */
+  --flow-col: 2.5rem;              /* colonne de la ligne et des nœuds */
   position: relative;
+  display: grid;
+  gap: 1.25rem;
+}
+@media (min-width: 64rem) {
+  .flow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2.5rem; align-items: start; }
 }
 
+/* ── Carte : collée sous le header pendant que les étapes défilent ── */
+.flow__map {
+  position: sticky;
+  z-index: 5;
+  /* Mobile : bandeau opaque sous le header, gouttières comprises, les étapes défilent dessous */
+  top: calc(2.75rem + 1px);
+  height: calc(min(40svh, 20rem) + 1.5rem);
+  margin-inline: -1.5rem;
+  padding: .75rem 1.5rem;
+  background: linear-gradient(to bottom, var(--color-bg) calc(100% - .75rem), transparent);
+}
+@media (min-width: 64rem) {
+  .flow__map { top: 5rem; height: min(calc(100svh - 7rem), 46rem); margin-inline: 0; padding: 0; background: none; }
+}
+.flow__frame {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid var(--color-line);
+  /* Ciel de nuit : opaque, les étapes défilent dessous en mobile */
+  background:
+    radial-gradient(120% 80% at 30% 0%, rgba(10,132,255,.10), transparent 60%),
+    linear-gradient(to bottom, #111318, var(--color-bg));
+}
+.flow__poster,
+.flow__canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  image-rendering: pixelated;
+}
+.flow__poster { object-fit: contain; padding: .75rem; transition: opacity .6s ease; }
+.flow__canvas { opacity: 0; transition: opacity .6s ease; }
+.flow.is-map-live .flow__canvas { opacity: 1; }
+.flow.is-map-live .flow__poster { opacity: 0; }
+
+.flow__pause {
+  position: absolute; right: 2.25rem; bottom: 1.5rem; z-index: 2;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-line2);
+  background: rgba(13,13,15,.7);
+  color: var(--color-strong);
+  transition: border-color .2s ease;
+}
+@media (min-width: 64rem) { .flow__pause { right: .75rem; bottom: .75rem; } }
+.flow__pause:hover { border-color: rgba(245,245,247,.4); }
+.flow__pause:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.flow__pause[hidden],
+.flow__play-icon,
+.flow__pause[aria-pressed="true"] .flow__pause-icon { display: none; }
+.flow__pause[aria-pressed="true"] .flow__play-icon { display: block; }
+
+/* ── Étapes ── */
 .flow__steps { position: relative; display: grid; gap: 1rem; }
 @media (min-width: 40rem) { .flow__steps { gap: 1.25rem; } }
 
-/* Ligne fixe (sans JS) : remplacée par le chemin SVG quand l'animation tourne */
+/* Ligne verticale qui relie les nœuds */
 .flow__steps::before {
   content: '';
   position: absolute;
@@ -29,7 +90,7 @@
   width: 2px;
   background: rgba(34,197,94,.45);
 }
-.flow.is-live .flow__steps::before { display: none; }
+.flow.is-live .flow__steps::before { background: var(--color-line2); }
 
 .flow__step {
   position: relative;
@@ -75,12 +136,12 @@
   transition: opacity .35s ease;
 }
 
-/* Étapes pas encore franchies (animation en cours) */
+/* Étapes pas encore atteintes par le paquet */
 .flow.is-live .flow__step:not(.is-done) .flow__node::before { opacity: 0; transform: scale(.5); }
 .flow.is-live .flow__step:not(.is-done) .flow__node svg { opacity: 0; }
 .flow.is-live .flow__step:not(.is-done) .flow__tick { opacity: .3; }
 
-/* Étape active : bordure en dégradé conique qui tourne, halo vert */
+/* Étape où se trouve le paquet : bordure en dégradé conique qui tourne, halo vert */
 .flow__step.is-active .flow__card {
   border-color: transparent;
   background:
@@ -92,49 +153,11 @@
 .flow__step.is-active .flow__node { filter: drop-shadow(0 0 8px rgba(34,197,94,.7)); }
 @keyframes flow-spin { to { --flow-angle: 360deg; } }
 
-/* Chemin SVG tracé au scroll, et paquet lumineux qui le parcourt */
-.flow__path {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  overflow: visible;
-  pointer-events: none;
-  display: none;
-}
-.flow.is-live .flow__path { display: block; }
-.flow__track { fill: none; stroke: var(--color-line2); stroke-width: 2; }
-.flow__trace {
-  fill: none;
-  stroke: var(--flow-green);
-  stroke-width: 2;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 4px rgba(34,197,94,.7));
-}
-
-.flow__packet {
-  position: absolute; left: 0; top: 0; z-index: 2;
-  width: 12px; height: 12px;
-  border-radius: 999px;
-  background: #bbf7d0;
-  box-shadow: 0 0 10px 3px rgba(34,197,94,.65);
-  opacity: 0;
-  pointer-events: none;
-  will-change: transform;
-}
-.flow.is-live .flow__packet { opacity: 1; }
-.flow__packet::after {
-  content: '';
-  position: absolute; inset: -6px;
-  border-radius: inherit;
-  border: 1px solid rgba(34,197,94,.7);
-  animation: flow-pulse 1.6s ease-out infinite;
-}
-@keyframes flow-pulse { from { transform: scale(.6); opacity: .9; } to { transform: scale(1.6); opacity: 0; } }
-
-/* Hors écran : animations en pause */
+/* Hors écran ou carte en pause : animations CSS en pause */
 .flow:not(.is-visible) .flow__card,
-.flow:not(.is-visible) .flow__packet::after { animation-play-state: paused; }
+.flow.is-paused .flow__card { animation-play-state: paused; }
 
 @media (prefers-reduced-motion: reduce) {
-  .flow__node::before, .flow__node svg, .flow__tick { transition: none; }
-  .flow__step.is-active .flow__card, .flow__packet::after { animation: none; }
+  .flow__node::before, .flow__node svg, .flow__tick, .flow__poster, .flow__canvas { transition: none; }
+  .flow__step.is-active .flow__card { animation: none; }
 }

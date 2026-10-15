@@ -90,6 +90,7 @@
     transition: outline-color .2s ease;
   }
   .hero__hotspot:hover { outline-color: rgba(245,245,247,.35); }
+  .hero__hotspot--cat:hover { outline-color: transparent; }        /* Blue : juste l'infobulle, pas de cadre (le focus clavier reste visible) */
   .hero__hotspot:focus-visible { outline: 2px solid var(--color-accent); }
   /* Façades découpées en parallélogramme (clip-path) : le contour serait coupé, on teinte la forme */
   .hero__hotspot[style*="clip-path"]:hover { background: rgba(245,245,247,.12); }
