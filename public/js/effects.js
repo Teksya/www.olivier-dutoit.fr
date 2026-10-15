@@ -110,7 +110,13 @@
   document.addEventListener('keydown', function (e) {
     if (e.keyCode === konamiSeq[konamiIdx]) {
       konamiIdx++;
-      if (konamiIdx === konamiSeq.length) { konamiIdx = 0; fireConfetti(); }
+      if (konamiIdx === konamiSeq.length) {
+        konamiIdx = 0;
+        // Une scène peut prendre la main (hero de l'accueil) en annulant l'événement ; sinon, confettis
+        var ev = null;
+        try { ev = new CustomEvent('konami', { cancelable: true }); } catch (err) { ev = null; }
+        if (!ev || document.dispatchEvent(ev)) fireConfetti();
+      }
     } else {
       konamiIdx = 0;
     }

@@ -37,7 +37,7 @@ Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce q
 | --- | --- | --- |
 | 1. Socle | Tailwind v4 compilé, GSAP servi en local | ✅ |
 | 2. Une seule page | Tout le site en chapitres, header en index, redirections des anciennes pages | ✅ |
-| 3. Hero homelab | Scène pixel art en hero (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) | ✅ intégration, ✅ vraies données, ⏳ interactions |
+| 3. Hero homelab | Scène pixel art en hero (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) | ✅ intégration, ✅ vraies données, ✅ interactions, ⏳ Blue grandit, ⏳ finitions |
 | 4. Ce site | Le trajet d'une requête, du visiteur au container Express | ⏳ |
 
 ## 🛠️ Lancer en local
@@ -110,6 +110,14 @@ Le haut de l'accueil montre mon bureau et ma baie en pixel art, avec Blue, ma ch
 - **Chargement** : l'affiche (jour de 8 h à 19 h, heure de Paris, sinon nuit) s'affiche tout de suite. Après le chargement de la page, [public/js/hero-homelab.js](public/js/hero-homelab.js) charge le moteur, mesure le temps de rendu, puis le canvas prend le relais : qualité `hd`, `standard` si la machine est juste, ou l'affiche seule si c'est trop lent. Rien ne tourne en `prefers-reduced-motion`.
 - **Mobile** : cadrage vertical sur la baie et l'arbre à chat, sans les activités hors champ. Un tap caresse Blue, un appui long allume le laser.
 - **Pause** : bouton en haut à droite, mémorisé dans le navigateur.
+
+### 🖱️ Interactions
+
+- **Zones cliquables** : un bouton transparent par appareil associé à un groupe Kuma, découpé à la forme de sa façade, et un sur Blue. Accessibles au clavier (Tab), avec une infobulle au survol ou au focus (« Stockage · en ligne · 42 ms », « Blue · 2 mois », âge calculé en direct depuis `data-cat-birth` du partial). Un clic sur un appareil ouvre un panneau : état et latence de chaque groupe, heure du relevé, lien vers la status page ; Échap le ferme.
+- **Incident** : quand un appareil tombe, Blue va s'asseoir devant la baie et le fixe (une fois par appareil toutes les 10 minutes au plus, jamais pendant le laser).
+- **La nuit**, la sieste sur la baie est plus fréquente.
+- **Laser** : double-clic à la souris, appui long au doigt (l'indice s'affiche sous le bouton Pause).
+- **Code Konami** : sur l'accueil, Blue fait la fête (zoomies puis cœurs) ; ailleurs, les confettis. `effects.js` émet un événement `konami` annulable, que le hero intercepte.
 
 ### 🟢 Les vrais états du homelab
 

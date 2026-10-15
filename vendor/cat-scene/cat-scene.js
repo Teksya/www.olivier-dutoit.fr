@@ -14,7 +14,7 @@
     avatar: { width: 256, height: 256, K: 24, OX: -472, OY: 520, scenario: 'avatar', vignette: 'avatar', stillAt: 4300 },
     wallpaper: { width: 960, height: 540, K: 8, OX: 464, OY: 360, scenario: 'live', vignette: 'wallpaper', room: 'large', stillAt: 3000, fps: 30 },
     /* Bandeau 21:9 du grand appartement (baie, bureau, tapis), sans la coupure de la baie par le clavier */
-    portfolio: { width: 960, height: 412, K: 8, OX: 464, OY: 290, scenario: 'live', vignette: 'wallpaper', room: 'large', stillAt: 3000, fps: 30, catFps: 15, activities: { keyboard: 0 } }
+    portfolio: { width: 960, height: 412, K: 8, OX: 464, OY: 290, scenario: 'live', vignette: 'wallpaper', room: 'large', stillAt: 3000, fps: 30, catFps: 15, activities: { keyboard: 0 }, nightActivities: { napRack: 2.5 } }
   };
 
   /* ================= Apparence de la chatonne (à faire évoluer) ================= */
@@ -861,10 +861,19 @@
        son état : 'up' (activité normale), 'down' (rouge fixe), 'degraded' (orange fixe), 'unknown' (éteint, gris).
        Un appareil absent de la carte est 'unknown' : jamais de vert sans donnée. */
     var DEVICES = ['fw', 'switch', 'server', 'nas', 'isp', 'mini', 'ups'];
+    /* Façade de chaque appareil (x0, x1, z0, z1 sur le plan des équipements), hauteur du regard et place devant la baie */
+    var DEVICE_BOX = {
+      fw: [5.05, 14.95, U(9), U(9) + UH], switch: [5.05, 14.95, U(10), U(10) + UH], server: [5.05, 14.95, U(6), U(6) + 2 * UH],
+      nas: [5.05, 14.95, U(4), U(4) + 2 * UH], isp: [5.8, 9.2, U(3), U(3) + UH], mini: [10.0, 12.6, U(3), U(3) + UH], ups: [5.05, 14.95, U(1), U(1) + 2 * UH]
+    };
+    var DEVICE_Z = {}, DEVICE_SPOT = {};
+    DEVICES.forEach(function (d) { var b = DEVICE_BOX[d]; DEVICE_Z[d] = (b[2] + b[3]) / 2; DEVICE_SPOT[d] = [(b[0] + b[1]) / 2, -6.5]; });
     var STATUS = null;
     function setStatus(map) {
+      var prev = STATUS;
       STATUS = {};
       DEVICES.forEach(function (d) { var s = map && map[d]; STATUS[d] = s === 'up' || s === 'down' || s === 'degraded' ? s : 'unknown'; });
+      if (LIVE) DEVICES.forEach(function (d) { if (STATUS[d] === 'down' && (!prev || prev[d] !== 'down')) LIVE.statusChanged(d); });
     }
     if (opt.status) setStatus(opt.status);
     function statusOf(dev) { return STATUS ? STATUS[dev] : 'up'; }
@@ -1347,6 +1356,7 @@
       if (w <= 0 || h <= 0) return null;
       var img = catCtx.createImageData(w, h), data = img.data;
       MK.fill(0, 0, w * h);
+      var tx0 = 1e9, ty0 = 1e9, tx1 = -1, ty1 = -1;                  // boîte serrée des pixels touchés (zones cliquables)
 
       for (var py = 0; py < h; py++) {
         for (var qx = 0; qx < w; qx++) {
@@ -1375,6 +1385,7 @@
           var o = (py * w + qx) * 4;
           data[o] = col[0]; data[o + 1] = col[1]; data[o + 2] = col[2]; data[o + 3] = 255;
           MK[py * w + qx] = 1; SB[py * w + qx] = st;
+          if (qx < tx0) tx0 = qx; if (qx > tx1) tx1 = qx; if (py < ty0) ty0 = py; if (py > ty1) ty1 = py;
         }
       }
       /* Contour sombre d'un pixel */
@@ -1387,7 +1398,7 @@
       }
       catCtx.putImageData(img, 0, 0);
       ctx.drawImage(catCv, 0, 0, w, h, x0, y0, w, h);
-      return { x0: x0, y0: y0, w: w, h: h };
+      return { x0: x0, y0: y0, w: w, h: h, tight: tx1 < 0 ? null : { x: x0 + tx0, y: y0 + ty0, w: tx1 - tx0 + 1, h: ty1 - ty0 + 1 } };
     }
 
     /* Yeux, nez et bouche, dessinés seulement s'ils sont visibles (test de profondeur) */
@@ -2344,8 +2355,43 @@
         add(600, function (p) { return { q: at(mixP(SIT, STAND, eio(p)), pc.x, pc.y, pc.z, pc.h) }; }, null, 'morph');
       }
 
+      /* ---- Incident : un appareil vient de tomber, elle va s'asseoir devant la baie et le fixe ---- */
+      var pendingInc = [], lastInc = {}, incidentOn = false, pendingPlay = null, lastHour = 12, lastSunny = false;
+      function incident(dev) {
+        var spot = DEVICE_SPOT[dev] || [10, -6.5], z = DEVICE_Z[dev] || 6;
+        goTo('floor');
+        floorRoute(spot);
+        turnTo(-PI2);                                                     // face à la baie
+        var look = Math.max(-0.2, Math.min(0.75, Math.atan2(z - 3.2, spot[1] - YE)));
+        var STARE = pose({ headPitch: look, headLift: 0.3, sway: 1.2, swayF: 1.4, earsBack: 0.1 }, SIT);
+        morph(STAND, STARE, 700);
+        holdPose(STARE, rr(8000, 12000), function (q, p, ms) { q.headYaw = 0.12 * Math.sin(ms / 1300); blink(q, ms); });
+        morph(STARE, STAND, 600);
+      }
+      function statusChanged(dev) {                                       // appelé quand un appareil passe 'down'
+        if (curMs - (lastInc[dev] === undefined ? -1e12 : lastInc[dev]) < (opt.incidentCooldown || 600000)) return;
+        lastInc[dev] = curMs;
+        if (pendingInc.indexOf(dev) < 0) pendingInc.push(dev);
+      }
+      /* Interrompt l'activité en cours (jamais une poursuite de laser) et enchaîne sur fn */
+      function interrupt(fn) {
+        var from = lastQ;
+        place(from.x, from.y, from.z, from.h, cur.at);
+        Q = []; cur = null;
+        add(380, function (p) { return { q: at(mixP(from, STAND, eio(p)), from.x, from.y, from.z, from.h) }; }, null, 'morph');
+        fn();
+      }
+      /* Fête (code Konami, par exemple) : zoomies puis une pluie de cœurs */
+      function celebrate() {
+        zoomies();
+        var x = pc.x, y = pc.y, z = pc.z, h = pc.h, HAPPY = pose({ headPitch: 0.3, eyes: 0.3, tailUp: 1.3 }, SIT);
+        morph(STAND, HAPPY, 500);
+        add(2800, function (p, ms) { var q = pose({ headYaw: 0.25 * Math.sin(ms / 400) }, HAPPY); return { q: at(q, x, y, z, h), purr: true }; }, null, 'hold');
+        morph(HAPPY, STAND, 500);
+      }
+
       /* ---- Choix de la prochaine activité selon l'heure ---- */
-      function plan(hour, sunny) {
+      function activityList(hour, sunny) {
         var night = hour < 6.5 || hour >= 23, morning = hour >= 6.5 && hour < 10, day = hour >= 10 && hour < 17.5;
         var A = [
           ['napRack', night ? 4 : 2, function () { nap('rack'); }],
@@ -2365,11 +2411,20 @@
           ['zoomies', hour >= 17.5 && hour < 23 ? 2.5 : 0.4, zoomies],
           ['box', 2, boxTime],
           ['sit', 1, function () { sitLook('rug'); }],
-          ['keyboard', hour >= 17 && hour < 24 ? 0.6 : 0.15, keyboard]
+          ['keyboard', hour >= 17 && hour < 24 ? 0.6 : 0.15, keyboard],
+          ['celebrate', 0, celebrate]                                     // seulement à la demande (play)
         ];
         if (opt.activities) A.forEach(function (a) {                      // poids réglables : 0 = jamais, 2 = deux fois plus souvent
           if (opt.activities[a[0]] !== undefined) a[1] *= opt.activities[a[0]];
         });
+        if (night && opt.nightActivities) A.forEach(function (a) {        // poids supplémentaires la nuit seulement
+          if (opt.nightActivities[a[0]] !== undefined) a[1] *= opt.nightActivities[a[0]];
+        });
+        return A;
+      }
+      function plan(hour, sunny) {
+        var A = activityList(hour, sunny);
+        incidentOn = false;
         if (opt.script) {                                                 // ordre imposé (export vidéo)
           var nm = opt.script[scriptI++ % opt.script.length];
           for (var j = 0; j < A.length; j++) if (A[j][0] === nm) { lastAct = nm; A[j][2](); return; }
@@ -2385,7 +2440,15 @@
       morph(SLEEP, AWAKE, 1000, function (q, p) { q.eyes = ss(0.4, 0.7, p); });
       morph(AWAKE, STAND, 800);
 
+      if (STATUS) DEVICES.forEach(function (d) { if (STATUS[d] === 'down') statusChanged(d); });   // déjà en panne au démarrage
+
       return {
+        statusChanged: statusChanged,
+        play: function (name) {
+          var known = activityList(lastHour, lastSunny).some(function (a) { return a[0] === name; });
+          if (known) pendingPlay = name;
+          return known;
+        },
         state: function (ms, hour, sunny, input) {
           var dtIn = Math.min(100, ms - curMs); curMs = ms;
           var bdt = dtIn / 1000, nbx = BALL.x + BALL.vx * bdt, nby = BALL.y + BALL.vy * bdt;      // balle : roule et ralentit
@@ -2402,6 +2465,15 @@
             surfSeen += dtIn;
             if (surfSeen > 450) { surfSeen = 0; startChase(true); }
           } else surfSeen = 0;
+          lastHour = hour; lastSunny = sunny;
+          /* Incident (priorité sur les activités au hasard) puis activité demandée ; jamais pendant le laser */
+          if (!chasing && !(input && input.laser) && canInterrupt()) {
+            if (pendingInc.length && !incidentOn) { var dev = pendingInc.shift(); incidentOn = true; lastAct = 'incident'; interrupt(function () { incident(dev); }); }
+            else if (pendingPlay) {
+              var want = pendingPlay; pendingPlay = null;
+              activityList(hour, sunny).forEach(function (a) { if (a[0] === want) { lastAct = want; interrupt(a[2]); } });
+            }
+          }
           while (!cur || ms - curStart >= cur.d) {
             if (cur) { if (lastQ) place(lastQ.x, lastQ.y, lastQ.z, lastQ.h); if (cur.end) cur.end(); curStart += cur.d; }
             else curStart = ms;
@@ -2524,7 +2596,21 @@
       if (running && !rafId) { last = null; rafId = requestAnimationFrame(loop); }
     }
 
+    /* Zones à l'écran (pixels du canvas) : façade de chaque appareil (rectangle englobant + les 4 coins du parallélogramme),
+       et la chatonne (boîte serrée de la dernière image calculée) */
+    function rectOf(pts) {
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      pts.forEach(function (p) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, points: pts.map(function (p) { return [p[0], p[1]]; }) };
+    }
+    function getHotspots() {
+      var devices = {};
+      DEVICES.forEach(function (d) { var b = DEVICE_BOX[d]; devices[d] = rectOf([P(b[0], YE, b[2]), P(b[1], YE, b[2]), P(b[1], YE, b[3]), P(b[0], YE, b[3])]); });
+      return { width: W, height: H, devices: devices, cat: lastBox && lastBox.tight ? lastBox.tight : null };
+    }
+
     var api = { frame: frame, duration: TOTAL, start: start, pause: pause, resume: resume, isPaused: function () { return paused; },
+      getHotspots: getHotspots, play: function (name) { return LIVE ? LIVE.play(name) : false; },
       canvas: cv, state: null, setWeather: setWeather, setStatus: setStatus, setScreenText: setScreenText, pointer: pointer, pointerLeave: pointerLeave,
       toggleLaser: toggleLaser, set: function (k, v) { opt[k] = v; } };
     if (opt.autoplay !== false) {

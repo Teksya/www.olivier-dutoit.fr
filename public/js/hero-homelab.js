@@ -141,20 +141,171 @@
     if (d && d.weather !== null && d.weather !== undefined) scene.setWeather(d.weather);
   }
 
+  // ── Zones interactives : un bouton par appareil connu et un pour Blue ──────
+  // Boutons transparents posés sur la scène (accessibles au clavier), infobulle au survol ou au focus,
+  // panneau de détail au clic. Les positions viennent de scene.getHotspots() (pixels du canvas).
+  var STATUS_FR = { up: 'en ligne', degraded: 'dégradé', down: 'hors ligne', unknown: 'état inconnu' };
+  var HOTSPOT_MS = 250;
+
+  function catAge() {
+    var b = new Date(root.dataset.catBirth + 'T00:00:00'), now = new Date();
+    if (isNaN(b)) return '';
+    var m = (now.getFullYear() - b.getFullYear()) * 12 + now.getMonth() - b.getMonth() - (now.getDate() < b.getDate() ? 1 : 0);
+    if (m < 1) return 'moins d\'un mois';
+    if (m < 12) return m + ' mois';
+    var y = Math.floor(m / 12), r = m % 12;
+    return y + (y > 1 ? ' ans' : ' an') + (r ? ' et ' + r + ' mois' : '');
+  }
+
+  // Appareils présents dans /api/homelab : noms publics, pire état, latence max
+  function devicesOf(d) {
+    var out = {};
+    ((d && d.groups) || []).forEach(function (g) {
+      var e = out[g.device] || (out[g.device] = { names: [], groups: [], latency: null });
+      e.names.push(g.name);
+      e.groups.push(g);
+      if (g.latency !== null && (e.latency === null || g.latency > e.latency)) e.latency = g.latency;
+      e.status = d.devices[g.device] || 'unknown';
+    });
+    return out;
+  }
+
+  function deviceLabel(e) {
+    return e.names.join(', ') + ' · ' + STATUS_FR[e.status] + (e.latency !== null && e.status !== 'down' ? ' · ' + e.latency + ' ms' : '');
+  }
+
+  function setupHotspots(scene) {
+    var stage = root.querySelector('[data-hero-stage]');
+    var layer = root.querySelector('[data-hero-hotspots]');
+    var tip = root.querySelector('[data-hero-tip]');
+    var panel = root.querySelector('[data-hero-panel]');
+    var panelTitle = root.querySelector('[data-hero-panel-title]');
+    var panelList = root.querySelector('[data-hero-panel-list]');
+    var panelTime = root.querySelector('[data-hero-panel-time]');
+    var buttons = {}, catBtn = null, tipFor = null, pinned = false, opener = null;
+
+    function button(key, onClick) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'hero__hotspot';
+      b.addEventListener('mouseenter', function () { showTip(b); });
+      b.addEventListener('mouseleave', function () { if (!pinned) hideTip(); });
+      b.addEventListener('focus', function () { showTip(b); });
+      b.addEventListener('blur', function () { pinned = false; hideTip(); });
+      b.addEventListener('click', onClick);
+      layer.appendChild(b);
+      return b;
+    }
+
+    function showTip(b) {
+      tipFor = b;
+      tip.textContent = b.getAttribute('aria-label');
+      tip.hidden = false;
+      placeTip();
+    }
+    function hideTip() { tipFor = null; tip.hidden = true; }
+    function placeTip() {
+      if (!tipFor) return;
+      var r = root.getBoundingClientRect(), br = tipFor.getBoundingClientRect();
+      var x = br.left - r.left + br.width / 2 - tip.offsetWidth / 2, y = br.top - r.top - tip.offsetHeight - 8;
+      if (y < 8) y = br.bottom - r.top + 8;
+      tip.style.left = Math.max(8, Math.min(r.width - tip.offsetWidth - 8, x)) + 'px';
+      tip.style.top = y + 'px';
+    }
+
+    function openPanel(e, b) {
+      opener = b;
+      panelTitle.textContent = e.names.join(', ');
+      panelList.innerHTML = '';
+      e.groups.forEach(function (g) {
+        var li = document.createElement('li');
+        li.textContent = g.name + ' : ' + STATUS_FR[g.status] + (g.latency !== null && g.status !== 'down' ? ', ' + g.latency + ' ms' : '');
+        panelList.appendChild(li);
+      });
+      panelTime.textContent = homelab && homelab.time ? 'Relevé à ' + homelab.time.hhmm + ' (heure de Paris)' : '';
+      panel.hidden = false;
+      panelTitle.focus();
+    }
+    function closePanel() {
+      if (panel.hidden) return;
+      panel.hidden = true;
+      if (opener) opener.focus();
+    }
+    root.querySelector('[data-hero-panel-close]').addEventListener('click', closePanel);
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closePanel(); pinned = false; hideTip(); } });
+    document.addEventListener('click', function (ev) { if (!panel.hidden && !panel.contains(ev.target) && !layer.contains(ev.target)) closePanel(); });
+
+    // Blue : infobulle avec son âge ; au doigt, un tap l'épingle
+    catBtn = button('cat', function () { pinned = !pinned; if (pinned) showTip(catBtn); else hideTip(); });
+    function catLabel() { return root.dataset.catName + ' · ' + catAge(); }
+    catBtn.setAttribute('aria-label', catLabel());
+
+    function sync() {
+      var devs = devicesOf(homelab);
+      Object.keys(buttons).forEach(function (k) { if (!devs[k]) { layer.removeChild(buttons[k]); delete buttons[k]; } });
+      Object.keys(devs).forEach(function (k) {
+        if (!buttons[k]) buttons[k] = button(k, function () { openPanel(devicesOf(homelab)[k], buttons[k]); });
+        buttons[k].setAttribute('aria-label', deviceLabel(devs[k]));
+      });
+      catBtn.setAttribute('aria-label', catLabel());
+      if (tipFor) showTip(tipFor);
+    }
+
+    // Pixels du canvas -> CSS : le canvas est affiché en object-fit: cover dans la scène.
+    // Façade d'appareil : le bouton est découpé à la forme du parallélogramme (clic et focus exacts).
+    // Blue : rectangle d'au moins 24 px de côté.
+    function place(b, r, sc, ox, oy, sw, sh) {
+      if (!r) { b.hidden = true; return; }
+      var poly = !!r.points, w = poly ? r.w * sc : Math.max(24, r.w * sc), h = poly ? r.h * sc : Math.max(24, r.h * sc);
+      var x = ox + r.x * sc + (r.w * sc - w) / 2, y = oy + r.y * sc + (r.h * sc - h) / 2;
+      b.hidden = x + w < 0 || y + h < 0 || x > sw || y > sh;
+      b.style.left = x + 'px';
+      b.style.top = y + 'px';
+      b.style.width = w + 'px';
+      b.style.height = h + 'px';
+      if (poly) b.style.clipPath = 'polygon(' + r.points.map(function (p) { return ((ox + p[0] * sc) - x).toFixed(1) + 'px ' + ((oy + p[1] * sc) - y).toFixed(1) + 'px'; }).join(', ') + ')';
+    }
+    function layout() {
+      var hs = scene.getHotspots(), sw = stage.clientWidth, sh = stage.clientHeight;
+      var sc = Math.max(sw / hs.width, sh / hs.height), ox = (sw - hs.width * sc) / 2, oy = (sh - hs.height * sc) / 2;
+      Object.keys(buttons).forEach(function (k) { place(buttons[k], hs.devices[k], sc, ox, oy, sw, sh); });
+      place(catBtn, hs.cat, sc, ox, oy, sw, sh);
+      placeTip();
+    }
+
+    sync();
+    layout();
+    setInterval(function () { if (!document.hidden && !scene.isPaused()) layout(); }, HOTSPOT_MS);   // Blue bouge
+    window.addEventListener('resize', layout);
+    return { sync: sync };
+  }
+
   function run(quality) {
     var sc = screenOf(homelab);
-    var extra = { autoplay: false, inputTarget: canvas, status: homelab ? homelab.devices : {}, screenText: sc.text, screenColor: sc.color };
+    var stage = root.querySelector('[data-hero-stage]');
+    var extra = { autoplay: false, inputTarget: stage, status: homelab ? homelab.devices : {}, screenText: sc.text, screenColor: sc.color };
     if (homelab && homelab.weather !== null && homelab.weather !== undefined) extra.weather = homelab.weather;
     if (homelab && homelab.theme) extra.theme = homelab.theme;
     var scene = window.CatScene.create(canvas, options(quality, extra));
     scene.frame(0);
+    var spots = setupHotspots(scene);
 
     setInterval(function () {
       if (document.hidden) return;
-      fetchHomelab(function (d) { homelab = d; applyHomelab(scene, d); });
+      fetchHomelab(function (d) { homelab = d; applyHomelab(scene, d); spots.sync(); });
     }, REFRESH_MS);
     root.classList.add('is-live');                     // le canvas apparaît en fondu au-dessus de l'affiche
     root.setAttribute('data-quality', quality);
+
+    // Petit indice pour le laser, selon le type d'écran
+    var hint = root.querySelector('[data-hero-hint]');
+    hint.textContent = window.matchMedia('(hover: none)').matches ? 'Appui long : laser' : 'Double-clic : laser';
+    hint.hidden = false;
+
+    // Code Konami (effects.js) : Blue fait la fête au lieu des confettis
+    document.addEventListener('konami', function (ev) {
+      if (!scene.isPaused() && scene.play('celebrate')) ev.preventDefault();
+    });
 
     var paused = readPaused();
     if (paused) scene.pause();
