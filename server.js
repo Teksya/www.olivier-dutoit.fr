@@ -99,6 +99,19 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 // Libs front servies en local (pas de CDN), uniquement le dossier dist
 app.use('/vendor/gsap', express.static(path.join(__dirname, 'node_modules', 'gsap', 'dist'), { maxAge: '7d' }));
+// Scène pixel art du hero : copie du moteur cat-abw-iso3d-webanim (npm run vendor:cat).
+// Cache long : l'URL porte une empreinte des fichiers, qui change à chaque mise à jour.
+const catSceneDir = path.join(__dirname, 'vendor', 'cat-scene');
+app.use('/vendor/cat-scene', express.static(catSceneDir, { maxAge: '30d' }));
+app.locals.catSceneVersion = (() => {
+	const hash = crypto.createHash('md5');
+	try {
+		['cat-scene.js', 'portfolio-jour.png', 'portfolio-nuit.png'].forEach((f) => hash.update(fs.readFileSync(path.join(catSceneDir, f))));
+		return hash.digest('hex').slice(0, 8);
+	} catch (e) {
+		return '0';
+	}
+})();
 app.use(express.static(path.join(__dirname, 'public')));
 
 // parse form bodies
@@ -785,7 +798,16 @@ const CONTACT_MESSAGES = {
 	'send-failed': { type: 'error', text: 'Impossible d\'envoyer l\'email.' }
 };
 
+// Heure de Paris (le homelab est à Saint-Étienne) : choisit l'affiche jour ou nuit du hero
+function parisHour() {
+	const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Paris', hour: 'numeric', hourCycle: 'h23' }).formatToParts(new Date());
+	return Number(parts.find((p) => p.type === 'hour').value);
+}
+
+function isDaytime(hour) { return hour >= 8 && hour < 19; }
+
 app.get('/', (req, res) => res.render('index', {
+	heroPoster: isDaytime(parisHour()) ? 'portfolio-jour.png' : 'portfolio-nuit.png',
 	title: 'Olivier D - Accueil',
 	description: 'Étudiant en BTS SIO SISR en alternance, passionné par les réseaux, l\'administration système et le développement web. Projets, parcours et contact.',
 	url: 'https://www.olivier-dutoit.fr',

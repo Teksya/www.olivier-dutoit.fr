@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "build:css": "tailwindcss -i ./src/css/app.css -o ./public/css/app.css --minify",
     "dev:css": "tailwindcss -i ./src/css/app.css -o ./public/css/app.css --watch=always",
+    "vendor:cat": "node scripts/vendor-cat.js",
     "projects:list": "node manage-projects.js list",
     "projects:add": "node manage-projects.js add",
     "projects:remove": "node manage-projects.js remove",

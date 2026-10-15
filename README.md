@@ -37,7 +37,7 @@ Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce q
 | --- | --- | --- |
 | 1. Socle | Tailwind v4 compilé, GSAP servi en local | ✅ |
 | 2. Une seule page | Tout le site en chapitres, header en index, redirections des anciennes pages | ✅ |
-| 3. Hero homelab | Scène pixel art (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) avec les vrais états du homelab | ⏳ |
+| 3. Hero homelab | Scène pixel art en hero (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) | ✅ intégration, ⏳ vraies données |
 | 4. Ce site | Le trajet d'une requête, du visiteur au container Express | ⏳ |
 
 ## 🛠️ Lancer en local
@@ -69,6 +69,7 @@ npm start
 | `npm run dev` | Lance le serveur avec rechargement automatique (nécessite `nodemon`) |
 | `npm run build:css` | Compile `src/css/app.css` vers `public/css/app.css`, minifié |
 | `npm run dev:css` | Même chose, en continu à chaque enregistrement |
+| `npm run vendor:cat` | Copie le moteur de la scène pixel art et ses affiches dans `vendor/cat-scene/` |
 | `npm run projects:list` | Liste les projets de `projects.json` |
 | `npm run projects:add` | Ajoute un projet (questions dans le terminal) |
 | `npm run projects:remove` | Supprime un projet |
@@ -101,11 +102,22 @@ npm start
 
 > 🟢 Le vert `#22c55e` veut dire « en ligne » partout sur le site. Les verts et rouges de Tailwind v3 sont repris tels quels dans `@theme`, la v4 les ayant changés.
 
+## 🐈 Hero : la scène pixel art
+
+Le haut de l'accueil montre mon bureau et ma baie en pixel art, avec Blue, ma chatonne, qui vit sa vie. La scène vient de mon moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim) (préréglage `portfolio`), cloné à côté de ce dépôt.
+
+- **Mettre à jour le moteur** : dans le dépôt du moteur, `npm run export:portfolio` (affiches jour et nuit), puis ici `npm run vendor:cat`. Les fichiers copiés dans `vendor/cat-scene/` sont commités et servis sous `/vendor/cat-scene/`, avec une empreinte dans l'URL (cache long). Autre emplacement du moteur : `CAT_ENGINE_DIR=/chemin npm run vendor:cat`.
+- **Chargement** : l'affiche (jour de 8 h à 19 h, heure de Paris, sinon nuit) s'affiche tout de suite. Après le chargement de la page, [public/js/hero-homelab.js](public/js/hero-homelab.js) charge le moteur, mesure le temps de rendu, puis le canvas prend le relais : qualité `hd`, `standard` si la machine est juste, ou l'affiche seule si c'est trop lent. Rien ne tourne en `prefers-reduced-motion`.
+- **Mobile** : cadrage vertical sur la baie et l'arbre à chat, sans les activités hors champ. Un tap caresse Blue, un appui long allume le laser.
+- **Pause** : bouton en haut à droite, mémorisé dans le navigateur.
+
 ## 🗂️ Structure du projet
 
 ```text
 .
 ├── server.js             Le serveur Express : pages, API, admin
+├── scripts/vendor-cat.js Copie du moteur de la scène pixel art (npm run vendor:cat)
+├── vendor/cat-scene/     Moteur et affiches du hero (commités)
 ├── manage-projects.js    Gestion des projets en ligne de commande
 ├── projects.json         Les projets du chapitre Projets
 ├── src/css/app.css       Source Tailwind (tokens dans @theme, composants)

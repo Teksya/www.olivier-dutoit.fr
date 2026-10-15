@@ -1,0 +1,36 @@
+<%#
+  Hero : scène pixel art du homelab (moteur cat-abw-iso3d-webanim, servi sous /vendor/cat-scene/).
+  L'affiche (image fixe) s'affiche tout de suite ; hero-homelab.js démarre le canvas par-dessus
+  quand la machine suit, sinon l'affiche reste. Le texte n'est jamais dessiné dans le canvas.
+%>
+<section class="hero" aria-labelledby="hero-titre" data-hero data-engine="/vendor/cat-scene/cat-scene.js?v=<%= catSceneVersion %>">
+  <div class="hero__scene">
+    <img class="hero__poster" src="/vendor/cat-scene/<%= heroPoster %>?v=<%= catSceneVersion %>" width="960" height="412" fetchpriority="high" decoding="async"
+      alt="Illustration en pixel art : une chatonne dort sur une baie serveur, dans un bureau avec un écran de supervision.">
+    <canvas class="hero__canvas" data-hero-canvas aria-hidden="true"></canvas>
+  </div>
+  <div class="hero__scrim" aria-hidden="true"></div>
+
+  <button type="button" class="hero__pause" data-hero-pause aria-pressed="false" hidden>
+    <svg class="hero__pause-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>
+    <svg class="hero__play-icon" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+    <span data-hero-pause-label>Pause</span>
+  </button>
+
+  <div class="hero__content">
+    <div class="mx-auto max-w-content px-6">
+      <p class="eyebrow">Étudiant en informatique</p>
+      <h1 id="hero-titre" class="mt-3 text-4xl font-semibold leading-[1.05] tracking-tight text-strong sm:text-6xl sm:leading-none">Olivier Dutoit</h1>
+      <p class="mt-4 max-w-md text-base text-strong sm:text-lg">Construire des infrastructures fiables, automatiser l'ennuyeux, héberger soi-même le reste.</p>
+      <p class="mt-4">
+        <span class="inline-flex items-center gap-2 rounded-full bg-bg/70 px-3 py-1 text-xs font-medium text-accenth">
+          <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>BTS SIO SISR en alternance · Saint-Étienne
+        </span>
+      </p>
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a href="#projets" class="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accenth">Voir mes projets</a>
+        <a href="#contact" class="inline-flex items-center gap-2 rounded-full border border-line2 bg-bg/60 px-5 py-2.5 text-sm font-medium text-strong transition-colors hover:border-strong/40">Me contacter</a>
+      </div>
+    </div>
+  </div>
+</section>

@@ -9,27 +9,9 @@
   };
 %>
 
-<div class="mx-auto max-w-content px-6 py-16 sm:py-20">
+<%- include('partials/hero-homelab') %>
 
-  <!-- HERO -->
-  <section class="reveal" aria-labelledby="hero-titre">
-    <p class="eyebrow">Étudiant en informatique</p>
-    <h1 id="hero-titre" class="mt-5 text-4xl font-semibold leading-[1.05] tracking-tight text-strong sm:text-6xl sm:leading-none">Olivier Dutoit</h1>
-    <p class="mt-6 max-w-xl text-lg text-strong">Construire des infrastructures fiables, automatiser l'ennuyeux, héberger soi-même le reste.</p>
-    <p class="mt-4 max-w-xl text-[15px] leading-relaxed text-body">
-      Actuellement en <strong class="font-medium text-strong">1<sup>re</sup> année de BTS SIO SISR</strong> en alternance,
-      après un <strong class="font-medium text-strong">Bac Pro CIEL</strong> mention Très Bien. Passionné par l'infrastructure IT.
-    </p>
-    <p class="mt-6">
-      <span class="inline-flex items-center gap-2 rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-accenth">
-        <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>BTS SIO SISR en alternance · Saint-Étienne
-      </span>
-    </p>
-    <div class="mt-8 flex flex-wrap gap-3">
-      <a href="#projets" class="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accenth">Voir mes projets</a>
-      <a href="#contact" class="inline-flex items-center gap-2 rounded-full border border-line px-5 py-2.5 text-sm font-medium text-body transition-colors hover:border-line2 hover:text-strong">Me contacter</a>
-    </div>
-  </section>
+<div class="mx-auto max-w-content px-6 pb-16 sm:pb-20">
 
   <% navChapters.forEach(function (c) { %>
     <section class="chapter" id="<%= c.id %>" aria-labelledby="<%= c.id %>-titre"<% if (lazyScripts[c.id]) { %> data-lazy-script="<%= lazyScripts[c.id] %>"<% } %>>
@@ -46,6 +28,7 @@
 
 </div>
 
+<script src="/js/hero-homelab.js" defer></script>
 <script src="/js/diploma-verify.js" defer></script>
 <script src="/js/chapters.js" defer></script>
 

@@ -60,6 +60,37 @@
   .nav-chapters { scrollbar-width: none; }
   .nav-chapters::-webkit-scrollbar { display: none; }
   .nav-link[aria-current="true"] { color: var(--color-strong); }
+
+  /* Hero : scène pixel art pleine largeur (affiche puis canvas), texte en bas à gauche sur un dégradé */
+  .hero { position: relative; height: 65svh; min-height: 26rem; max-height: 48rem; overflow: hidden; background: var(--color-bg); }
+  .hero__scene,
+  .hero__poster,
+  .hero__canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hero__poster,
+  .hero__canvas { object-fit: cover; image-rendering: pixelated; }
+  .hero__canvas { opacity: 0; transition: opacity .6s ease; -webkit-touch-callout: none; user-select: none; }   /* appui long = laser, pas de menu */
+  .hero.is-live .hero__canvas { opacity: 1; }
+  .hero__scrim {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(to top, var(--color-bg) 0%, rgba(13,13,15,.78) 24%, rgba(13,13,15,.25) 52%, transparent 70%),
+      linear-gradient(to right, rgba(13,13,15,.6) 0%, transparent 50%);
+  }
+  .hero__content { position: absolute; left: 0; right: 0; bottom: 0; padding-bottom: 2.5rem; pointer-events: none; }
+  .hero__content a { pointer-events: auto; }
+  .hero__pause { @apply absolute top-4 right-4 inline-flex items-center gap-1.5 rounded-full border border-line2 bg-bg/70 px-3 py-1.5 text-xs font-medium text-strong backdrop-blur transition-colors hover:border-strong/40; }
+  .hero__pause[hidden] { display: none; }
+  .hero__play-icon,
+  .hero__pause[aria-pressed="true"] .hero__pause-icon { display: none; }
+  .hero__pause[aria-pressed="true"] .hero__play-icon { display: block; }
+  @media (max-width: 39.99rem) {
+    .hero { height: 72svh; }
+    .hero__poster { object-position: 70% 50%; }    /* recadre l'affiche sur la baie, comme le canvas mobile */
+    .hero__content { padding-bottom: 1.75rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero__canvas { transition: none; }
+  }
   @media (max-width: 47.99rem) {
     .nav-chapters {
       mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 24px), transparent);
