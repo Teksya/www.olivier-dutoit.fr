@@ -23,7 +23,7 @@
 <body class="min-h-screen bg-bg font-sans text-[15px] leading-relaxed text-body antialiased">
 
   <nav class="sticky top-0 z-50 border-b border-line bg-bg/60 backdrop-blur-2xl backdrop-saturate-150">
-    <div class="mx-auto flex h-11 max-w-content items-center justify-between px-6">
+    <div class="mx-auto flex h-11 <%= locals.wide ? 'max-w-wide' : 'max-w-content' %> items-center justify-between px-6">
       <a href="/" class="text-[13px] font-semibold tracking-tight text-strong">Olivier D.</a>
       <div class="flex items-center gap-8">
         <a href="/work" class="nav-link text-xs font-normal transition-colors">Travaux</a>

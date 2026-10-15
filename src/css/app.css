@@ -40,4 +40,41 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --container-content: 64rem;
+  --container-wide:    76rem;   /* accueil : contenu 64rem + colonne d'index */
+}
+
+/* ── Composants partagés : un seul rendu de carte pour tout le site ── */
+@layer components {
+  .card       { @apply rounded-3xl border border-line bg-surface; }
+  .card-hover { @apply transition-colors hover:border-line2; }
+  .eyebrow    { @apply text-sm font-semibold text-accenth; }
+
+  /* Chapitres de l'accueil */
+  .chapter        { @apply mt-16 scroll-mt-20 border-t border-line pt-14 sm:mt-20 sm:pt-16; }
+  .chapter-num    { @apply font-mono text-xs font-medium tracking-[.12em] text-accenth; }
+  .chapter-title  { @apply mt-3 text-2xl font-semibold tracking-tight text-strong sm:text-3xl; }
+  .chapter-text   { @apply mt-3 max-w-2xl text-[15px] leading-relaxed text-body; }
+  .chapter-visual { @apply mt-8; }
+
+  /* Index des chapitres (desktop) : trait accent sur le chapitre actif */
+  .chapter-index__link { @apply relative flex gap-3 py-1.5 pl-4 text-xs leading-snug text-muted transition-colors hover:text-body; }
+  .chapter-index__link::before,
+  .chapter-index__link::after {
+    content: '';
+    position: absolute;
+    left: 0; top: .375rem; bottom: .375rem;
+    width: 1px;
+  }
+  .chapter-index__link::before { background: var(--color-line2); }
+  .chapter-index__link::after {
+    background: var(--color-accent);
+    transform: scaleY(0);
+    transition: transform .35s cubic-bezier(.16,1,.3,1);
+  }
+  .chapter-index__link[aria-current="true"] { @apply text-strong; }
+  .chapter-index__link[aria-current="true"]::after { transform: scaleY(1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chapter-index__link::after { transition: none; }
+  }
 }

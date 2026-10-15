@@ -34,7 +34,7 @@
     "id": 8,
     "featured": false,
     "title": "Portfolio Web v4",
-    "description": "Ce site — développé avec Express.js et EJS. Design moderne et responsive.",
+    "description": "Ce site, développé avec Express.js et EJS. Design moderne et responsive.",
     "image": "api.webp",
     "tags": [
       "node.js",
@@ -46,7 +46,7 @@
     "id": 2,
     "featured": false,
     "title": "Monitoring Proxmox",
-    "description": "Surveillance hebdomadaire des VMs/CT — détection d'état, redémarrage auto, notifications webhook & email.",
+    "description": "Surveillance hebdomadaire des VMs/CT : détection d'état, redémarrage auto, notifications webhook & email.",
     "image": "proxmox.webp",
     "tags": [
       "bash",
@@ -70,7 +70,7 @@
     "id": 4,
     "featured": false,
     "title": "Configuration Réseau",
-    "description": "Infrastructure réseau complète — routage, VLAN, pare-feu, VPN sur Mikrotik et HP Aruba.",
+    "description": "Infrastructure réseau complète : routage, VLAN, pare-feu, VPN sur Mikrotik et HP Aruba.",
     "image": "switch.webp",
     "tags": [
       "mikrotik",
@@ -82,7 +82,7 @@
     "id": 5,
     "featured": false,
     "title": "Serveur Mail",
-    "description": "Serveur mail avec poste.io via Docker — gestion boîtes, DNS (MX, SPF, DKIM), sécurisation TLS.",
+    "description": "Serveur mail avec poste.io via Docker : gestion boîtes, DNS (MX, SPF, DKIM), sécurisation TLS.",
     "image": "mails.webp",
     "tags": [
       "docker",
@@ -106,7 +106,7 @@
     "id": 7,
     "featured": false,
     "title": "NAS OpenMediaVault",
-    "description": "Mise en place d'un NAS avec OpenMediaVault — configuration SMB/NFS, gestion RAID.",
+    "description": "Mise en place d'un NAS avec OpenMediaVault : configuration SMB/NFS, gestion RAID.",
     "image": "hdd.webp",
     "tags": [
       "omv",
@@ -129,8 +129,8 @@
   {
     "id": 10,
     "featured": false,
-    "title": "Site vitrine — solve-scp",
-    "description": "Site vitrine pour un serveur Garry's Mod SCP RP — lore, équipes, avancement du projet.",
+    "title": "Site vitrine : solve-scp",
+    "description": "Site vitrine pour un serveur Garry's Mod SCP RP : lore, équipes, avancement du projet.",
     "image": "solvescp.webp",
     "tags": [
       "html",
@@ -141,8 +141,8 @@
   {
     "id": 11,
     "featured": false,
-    "title": "Site vitrine — solve-city.fr",
-    "description": "Site vitrine GTA RP — concept, captures et statut. Projet non abouti.",
+    "title": "Site vitrine : solve-city.fr",
+    "description": "Site vitrine GTA RP : concept, captures et statut. Projet non abouti.",
     "image": "solvecity.webp",
     "tags": [
       "html",

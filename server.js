@@ -712,12 +712,21 @@ if (smtpHost && smtpUser) {
 	});
 }
 
+// Accueil : le projet "featured" d'abord, puis les suivants dans l'ordre de projects.json
+function getHomeProjects(limit) {
+	const projects = loadProjects();
+	return projects.filter((p) => p.featured)
+		.concat(projects.filter((p) => !p.featured))
+		.slice(0, limit);
+}
+
 app.get('/', (req, res) => res.render('index', {
 	title: 'Olivier D - Accueil',
 	description: 'Étudiant en Bac Pro CIEL futur alternant en BTS SIO SISR. Passionné par les réseaux, administration système et développement web.',
 	url: 'https://www.olivier-dutoit.fr',
 	ogImage: 'https://www.olivier-dutoit.fr/og-image.png',
-	projectCount: loadProjects().length
+	homeProjects: getHomeProjects(3),
+	wide: true
 }));
 
 app.get('/about', (req, res) => res.render('about', { 

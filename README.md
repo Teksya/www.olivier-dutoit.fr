@@ -69,7 +69,7 @@ npm start
 | `npm run projects:list` | Liste les projets de `projects.json` |
 | `npm run projects:add` | Ajoute un projet (questions dans le terminal) |
 | `npm run projects:remove` | Supprime un projet |
-| `npm run projects:toggle` | Affiche ou masque un projet |
+| `npm run projects:toggle` | Met un projet en avant (featured) ou le retire |
 | `npm run projects:reorder` | Change l'ordre des projets |
 
 | Variable (`.env`) | Rôle |
