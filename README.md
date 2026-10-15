@@ -81,7 +81,7 @@ npm start
 | `KENER_API_KEY` | Clé facultative pour lire la status page |
 | `PORT` | Port d'écoute |
 
-> 🔐 Les réglages modifiés depuis `/admin` sont enregistrés dans `admin-config.json` et passent avant les valeurs du `.env`.
+> 🔐 Les réglages modifiés depuis `/admin` sont enregistrés dans `admin-config.json` et passent avant les valeurs du `.env`. Ce fichier contient des secrets : il n'est pas versionné. [admin-config.example.json](admin-config.example.json) montre sa forme, sans les secrets.
 
 ## 🎨 CSS et librairies front
 

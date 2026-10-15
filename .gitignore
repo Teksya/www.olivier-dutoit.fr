@@ -1,3 +1,6 @@
 node_modules/
 .env
 .DS_Store
+
+# Réglages de l'admin (contiennent des secrets) : voir admin-config.example.json
+admin-config.json
