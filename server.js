@@ -97,6 +97,8 @@ const port = process.env.PORT || 3000;
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+// Libs front servies en local (pas de CDN), uniquement le dossier dist
+app.use('/vendor/gsap', express.static(path.join(__dirname, 'node_modules', 'gsap', 'dist'), { maxAge: '7d' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // parse form bodies
