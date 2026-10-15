@@ -341,7 +341,7 @@ function uptimeKumaGet(config, endpointPath) {
 }
 
 // Lit la status page une fois et en tire les deux vues : par groupe (/api/uptime)
-// et par service (/api/infra). Liste blanche stricte : ni id, ni URL, ni message de monitor.
+// et par service. Liste blanche stricte : ni id, ni URL, ni message de monitor.
 async function loadUptimeKumaSnapshot(config) {
 	const [statusPage, heartbeatPage] = await Promise.all([
 		uptimeKumaGet(config, `/api/status-page/${encodeURIComponent(config.slug)}`),
@@ -416,26 +416,12 @@ function getHomelabSnapshot() {
 	return homelabPending;
 }
 
-// Pour le rendu serveur : n'attend pas la status page plus de `ms`
-function getHomelabSnapshotWithin(ms) {
-	let timer;
-	return Promise.race([
-		getHomelabSnapshot(),
-		new Promise((resolve) => { timer = setTimeout(() => resolve(null), ms); })
-	]).finally(() => clearTimeout(timer));
-}
-
 app.get('/api/uptime', async (req, res) => {
 	const snapshot = await getHomelabSnapshot();
 	if (!snapshot) return res.json({ ok: false });
 	res.json({ ok: true, overall: snapshot.groups.every((g) => g.up), groups: snapshot.groups });
 });
 
-app.get('/api/infra', async (req, res) => {
-	const snapshot = await getHomelabSnapshot();
-	if (!snapshot) return res.json({ ok: false });
-	res.json({ ok: true, services: snapshot.services });
-});
 
 async function getSpotifyToken() {
 	const tokenKey = `${spotifyConfig.SPOTIFY_CLIENT_ID}:${spotifyConfig.SPOTIFY_REFRESH_TOKEN}`;
@@ -761,59 +747,59 @@ if (smtpHost && smtpUser) {
 	});
 }
 
-// Accueil : le projet "featured" d'abord, puis les suivants dans l'ordre de projects.json
-function getHomeProjects(limit) {
-	const projects = loadProjects();
-	return projects.filter((p) => p.featured)
-		.concat(projects.filter((p) => !p.featured))
-		.slice(0, limit);
+// Accueil one-page : chapitres numérotés après filtrage, partagés avec le header (res.locals.navChapters).
+// Chaque id correspond à un partial views/partials/chapters/<id>.ejs.
+function getHomeChapters() {
+	const about = getAboutConfig();
+	const live = about.spotifyEnabled || about.discordEnabled || about.githubEnabled || about.homelabEnabled;
+	return [
+		{ id: 'projets', label: 'Projets', title: 'Projets',
+			text: 'Projets académiques et personnels, entre infrastructure, administration système et développement. Filtre par technologie, clique pour le détail.' },
+		{ id: 'parcours', label: 'Parcours', title: 'Parcours',
+			text: 'Du Bac Pro CIEL au BTS SIO SISR en alternance. Le diplôme du Bac Pro se vérifie par QR code.' },
+		live && { id: 'en-direct', label: 'En direct', title: 'En direct',
+			text: 'Ce que j\'écoute, mon statut Discord, mon dernier push et l\'état de mon homelab. Mis à jour en continu.' },
+		{ id: 'competences', label: 'Compétences', title: 'Compétences',
+			text: 'Ce que j\'utilise en cours comme en alternance, rangé par domaine.' },
+		{ id: 'ce-site', label: 'Ce site', title: 'Comment ce site est servi',
+			text: 'Le chemin d\'une requête, de votre navigateur jusqu\'au container qui répond. À chaque étape, les contrôles qui la protègent.' },
+		{ id: 'contact', label: 'Contact', title: 'Me contacter',
+			text: 'Vous avez un projet ou une opportunité ? Je suis disponible.' }
+	]
+		.filter(Boolean)
+		.map((c, i) => Object.assign({ num: String(i + 1).padStart(2, '0') }, c));
 }
 
-app.get('/', async (req, res, next) => {
-	try {
-		const homelabEnabled = parseBoolean(spotifyConfig.HOMELAB_ENABLED);
-		const snapshot = homelabEnabled ? await getHomelabSnapshotWithin(800) : null;
-		res.render('index', {
-			title: 'Olivier D - Accueil',
-			description: 'Étudiant en Bac Pro CIEL futur alternant en BTS SIO SISR. Passionné par les réseaux, administration système et développement web.',
-			url: 'https://www.olivier-dutoit.fr',
-			ogImage: 'https://www.olivier-dutoit.fr/og-image.png',
-			homeProjects: getHomeProjects(3),
-			homelabEnabled,
-			homelabName: String(spotifyConfig.HOMELAB_NAME || 'Homelab').trim() || 'Homelab',
-			infraServices: snapshot ? snapshot.services : null,
-			wide: true
-		});
-	} catch (e) {
-		next(e);
-	}
+app.use((req, res, next) => {
+	res.locals.navChapters = getHomeChapters();
+	next();
 });
 
-app.get('/about', (req, res) => res.render('about', { 
-	title: 'Olivier D - À propos',
-	description: 'En savoir plus sur mon parcours, mes compétences en réseaux et systèmes, et mes projets.',
-	url: 'https://www.olivier-dutoit.fr/about',
+// Retour du formulaire de contact (POST puis redirection vers /?contact=<code>#contact)
+const CONTACT_MESSAGES = {
+	'sent': { type: 'success', text: 'Message envoyé avec succès.' },
+	'no-smtp': { type: 'success', text: 'Validation Turnstile réussie (email non envoyé, SMTP non configuré).' },
+	'no-token': { type: 'error', text: 'Validation Turnstile manquante.' },
+	'turnstile-failed': { type: 'error', text: 'Échec de la vérification Turnstile.' },
+	'turnstile-error': { type: 'error', text: 'Erreur serveur lors de la vérification Turnstile.' },
+	'send-failed': { type: 'error', text: 'Impossible d\'envoyer l\'email.' }
+};
+
+app.get('/', (req, res) => res.render('index', {
+	title: 'Olivier D - Accueil',
+	description: 'Étudiant en BTS SIO SISR en alternance, passionné par les réseaux, l\'administration système et le développement web. Projets, parcours et contact.',
+	url: 'https://www.olivier-dutoit.fr',
 	ogImage: 'https://www.olivier-dutoit.fr/og-image.png',
-	aboutConfig: getAboutConfig()
+	projects: loadProjects(),
+	aboutConfig: getAboutConfig(),
+	turnstileSiteKey,
+	contactStatus: Object.prototype.hasOwnProperty.call(CONTACT_MESSAGES, req.query.contact) ? CONTACT_MESSAGES[req.query.contact] : null
 }));
 
-app.get('/work', (req, res) => res.render('work', { 
-	title: 'Olivier D - Travaux',
-	description: 'Découvrez mes projets en réseaux, administration système et développement web.',
-	url: 'https://www.olivier-dutoit.fr/work',
-	ogImage: 'https://www.olivier-dutoit.fr/og-image.png',
-	projects: loadProjects()
-}));
-
-app.get('/contact', (req, res) => res.render('contact', { 
-	title: 'Olivier D - Contact', 
-	turnstileSiteKey, 
-	error: null, 
-	success: null,
-	description: 'Contactez-moi pour discuter d\'opportunités de projets.',
-	url: 'https://www.olivier-dutoit.fr/contact',
-	ogImage: 'https://www.olivier-dutoit.fr/og-image.png'
-}));
+// Anciennes pages, devenues des chapitres de l'accueil
+app.get('/work', (req, res) => res.redirect(301, '/#projets'));
+app.get('/about', (req, res) => res.redirect(301, '/#parcours'));
+app.get('/contact', (req, res) => res.redirect(301, '/#contact'));
 
 app.get('/mentions-legales', (req, res) => res.render('mentions-legales', {
 	title: 'Olivier D - Mentions légales',
@@ -881,44 +867,46 @@ function verifyTurnstile(token, remoteip) {
 	});
 }
 
+function escapeHtml(value) {
+	return String(value || '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+// POST puis redirection (303) vers le chapitre Contact de l'accueil, avec un code de retour
 app.post('/contact', async (req, res) => {
 	const name = req.body.name;
 	const email = req.body.email;
+	const subject = String(req.body.subject || '').trim();
 	const message = req.body.message;
 	const token = req.body['cf-turnstile-response'];
+	const back = (code) => res.redirect(303, `/?contact=${code}#contact`);
 
-	if (!token) {
-		return res.status(400).render('contact', { title: 'Olivier D - Contact', turnstileSiteKey, error: 'Validation Turnstile manquante.', success: null, description: 'Contactez-moi pour discuter d\'opportunités ou de projets.', url: 'https://www.olivier-dutoit.fr/contact', ogImage: 'https://www.olivier-dutoit.fr/og-image.png' });
-	}
+	if (!token) return back('no-token');
 
 	try {
 		const result = await verifyTurnstile(token, req.ip);
-		if (result && result.success) {
-			if (transporter) {
-				try {
-					await transporter.sendMail({
-						from: fromEmail,
-						to: toEmail,
-						subject: `Nouveau message de contact - ${name} <${email}>`,
-						text: `Nom: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
-						html: `<p><strong>Nom:</strong> ${name}</p><p><strong>Email:</strong> ${email}</p><p><strong>Message:</strong></p><p>${message}</p>`
-					});
-					return res.render('contact', { title: 'Olivier D - Contact', turnstileSiteKey, success: 'Message envoyé avec succès.', error: null, description: 'Contactez-moi pour discuter d\'opportunités ou de projets.', url: 'https://www.olivier-dutoit.fr/contact', ogImage: 'https://www.olivier-dutoit.fr/og-image.png' });
-				} catch (mailErr) {
-					console.error('Mail send error:', mailErr);
-					return res.status(500).render('contact', { title: 'Olivier D - Contact', turnstileSiteKey, error: "Impossible d'envoyer l'email.", success: null, description: 'Contactez-moi pour discuter d\'opportunités ou de projets.', url: 'https://www.olivier-dutoit.fr/contact', ogImage: 'https://www.olivier-dutoit.fr/og-image.png' });
-				}
-			} else {
-				// No transporter configured
-				console.warn('SMTP transporter not configured; skipping email send.');
-				return res.render('contact', { title: 'Olivier D - Contact', turnstileSiteKey, success: 'Validation Turnstile réussie (email non envoyé, SMTP non configuré).', error: null, description: 'Contactez-moi pour discuter d\'opportunités ou de projets.', url: 'https://www.olivier-dutoit.fr/contact', ogImage: 'https://www.olivier-dutoit.fr/og-image.png' });
-			}
-		} else {
-			return res.status(400).render('contact', { title: 'Olivier D - Contact', turnstileSiteKey, error: 'Échec de la vérification Turnstile.', success: null, description: 'Contactez-moi pour discuter d\'opportunités ou de projets.', url: 'https://www.olivier-dutoit.fr/contact', ogImage: 'https://www.olivier-dutoit.fr/og-image.png' });
+		if (!result || !result.success) return back('turnstile-failed');
+
+		if (!transporter) {
+			console.warn('SMTP transporter not configured; skipping email send.');
+			return back('no-smtp');
+		}
+
+		try {
+			await transporter.sendMail({
+				from: fromEmail,
+				to: toEmail,
+				subject: `Nouveau message de contact - ${name} <${email}>`,
+				text: `Nom: ${name}\nEmail: ${email}\nSujet: ${subject}\n\nMessage:\n${message}`,
+				html: `<p><strong>Nom:</strong> ${escapeHtml(name)}</p><p><strong>Email:</strong> ${escapeHtml(email)}</p><p><strong>Sujet:</strong> ${escapeHtml(subject)}</p><p><strong>Message:</strong></p><p>${escapeHtml(message)}</p>`
+			});
+			return back('sent');
+		} catch (mailErr) {
+			console.error('Mail send error:', mailErr);
+			return back('send-failed');
 		}
 	} catch (err) {
 		console.error('Turnstile verification error:', err);
-		return res.status(500).render('contact', { title: 'Olivier D - Contact', turnstileSiteKey, error: 'Erreur serveur lors de la vérification Turnstile.', success: null, description: 'Contactez-moi pour discuter d\'opportunités ou de projets.', url: 'https://www.olivier-dutoit.fr/contact', ogImage: 'https://www.olivier-dutoit.fr/og-image.png' });
+		return back('turnstile-error');
 	}
 });
 

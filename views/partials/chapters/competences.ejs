@@ -1,0 +1,27 @@
+<%# Chapitre Compétences : rangées par domaine %>
+<%
+  const skills = [
+    { domain: 'Réseaux et systèmes', items: ['Windows Server', 'Linux', 'Cisco', 'Mikrotik', 'Proxmox'] },
+    { domain: 'Langages', items: ['JavaScript', 'Node.js', 'PHP', 'Python', 'C#'] },
+    { domain: 'Front-end', items: ['HTML/CSS', 'Tailwind CSS', 'Figma', 'Canva'] },
+    { domain: 'Outils', items: ['Docker', 'Git', 'MySQL', 'Wireshark'] }
+  ];
+  const interests = ['Homelab', 'Self-hosting', 'Serveurs de jeu', 'Veille techno'];
+%>
+<div class="reveal card overflow-hidden">
+  <div class="grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-4">
+    <% skills.forEach(function (group) { %>
+      <div class="bg-surface p-6">
+        <h3 class="text-sm font-semibold text-strong"><%= group.domain %></h3>
+        <ul class="mt-4 space-y-2 text-sm text-body">
+          <% group.items.forEach(function (item) { %>
+            <li><%= item %></li>
+          <% }); %>
+        </ul>
+      </div>
+    <% }); %>
+  </div>
+  <p class="border-t border-line px-6 py-4 text-sm text-body">
+    <span class="font-medium text-strong">Centres d'intérêt :</span> <%= interests.join(', ') %>.
+  </p>
+</div>

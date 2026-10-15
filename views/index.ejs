@@ -1,130 +1,52 @@
 <%- include('partials/header') %>
 
 <%
-  // Chapitres dans l'ordre, numérotés après filtrage (Infrastructure masqué si le homelab est désactivé)
-  const chapters = [
-    { key: 'infra', enabled: homelabEnabled, id: 'chapitre-infrastructure', label: 'Infrastructure', title: 'Infrastructure',
-      text: 'Les services de mon homelab, relevés en direct sur ma status page. Chaque bloc est un service : vert s\'il répond, avec sa latence.' },
-    { key: 'site', id: 'chapitre-ce-site', label: 'Ce site', title: 'Comment ce site est servi',
-      text: 'Le chemin d\'une requête, de votre navigateur jusqu\'au container qui répond. À chaque étape, les contrôles qui la protègent.' },
-    { key: 'projets', id: 'chapitre-projets', label: 'Projets', title: 'Projets mis en avant',
-      text: 'Une sélection de réalisations, entre infrastructure et développement. Le reste est sur la page Travaux.' },
-    { key: 'competences', id: 'chapitre-competences', label: 'Compétences', title: 'Compétences',
-      text: 'Ce que j\'utilise en cours comme en alternance, rangé par domaine.' }
-  ].filter((c) => c.enabled !== false);
-  const ch = {};
-  chapters.forEach((c, i) => { c.num = String(i + 1).padStart(2, '0'); ch[c.key] = c; });
+  // Chapitres définis dans server.js (getHomeChapters), partagés avec le header.
+  // Scripts lourds chargés à l'approche du chapitre (chapters.js, data-lazy-script).
+  const lazyScripts = {
+    'en-direct': '/js/about.js',
+    'contact': 'https://challenges.cloudflare.com/turnstile/v0/api.js'
+  };
+%>
 
-  const skills = [
-    { domain: 'Réseaux et systèmes', items: ['Windows Server', 'Linux', 'Cisco', 'Mikrotik', 'Proxmox'] },
-    { domain: 'Langages', items: ['JavaScript', 'Node.js', 'PHP', 'Python', 'C#'] },
-    { domain: 'Front-end', items: ['HTML/CSS', 'Tailwind CSS', 'Figma', 'Canva'] },
-    { domain: 'Outils', items: ['Docker', 'Git', 'MySQL', 'Wireshark'] }
-  ];
+<div class="mx-auto max-w-content px-6 py-16 sm:py-20">
 
-  function chapterHead(c) { %>
-    <p class="chapter-num"><%= c.num %></p>
-    <h2 class="chapter-title" id="<%= c.id %>-titre"><%= c.title %></h2>
-    <p class="chapter-text"><%= c.text %></p>
-<% } %>
-
-<div class="mx-auto max-w-wide px-6 py-16 sm:py-20">
-  <div class="lg:grid lg:grid-cols-[9rem_minmax(0,1fr)] lg:gap-12">
-
-    <%- include('partials/chapter-index', { chapters }) %>
-
-    <div class="min-w-0">
-
-      <!-- HERO -->
-      <section class="reveal" aria-labelledby="hero-titre">
-        <p class="eyebrow">Étudiant en informatique</p>
-        <h1 id="hero-titre" class="mt-5 text-4xl font-semibold leading-[1.05] tracking-tight text-strong sm:text-6xl sm:leading-none">Olivier Dutoit</h1>
-        <p class="mt-6 max-w-xl text-[15px] leading-relaxed text-body">
-          Actuellement en <strong class="font-medium text-strong">1<sup>re</sup> année de BTS SIO SISR</strong> en alternance,
-          après un <strong class="font-medium text-strong">Bac Pro CIEL</strong> mention Très Bien. Passionné par l'infrastructure IT.
-        </p>
-        <p class="mt-6">
-          <span class="inline-flex items-center gap-2 rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-accenth">
-            <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>BTS SIO SISR en alternance · Saint-Étienne
-          </span>
-        </p>
-        <div class="mt-8 flex flex-wrap gap-3">
-          <a href="/work" class="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accenth">Voir mes projets</a>
-          <a href="/contact" class="inline-flex items-center gap-2 rounded-full border border-line px-5 py-2.5 text-sm font-medium text-body transition-colors hover:border-line2 hover:text-strong">Me contacter</a>
-        </div>
-      </section>
-
-      <!-- INFRASTRUCTURE EN DIRECT -->
-      <% if (ch.infra) { %>
-      <section class="chapter" id="<%= ch.infra.id %>" aria-labelledby="<%= ch.infra.id %>-titre">
-        <div class="reveal"><% chapterHead(ch.infra); %></div>
-        <div class="chapter-visual">
-          <%- include('partials/infra-iso') %>
-        </div>
-      </section>
-      <% } %>
-
-      <!-- COMMENT CE SITE EST SERVI (flux : phase 4) -->
-      <section class="chapter" id="<%= ch.site.id %>" aria-labelledby="<%= ch.site.id %>-titre">
-        <div class="reveal"><% chapterHead(ch.site); %></div>
-        <div class="chapter-visual reveal">
-          <div class="flex min-h-64 items-center justify-center rounded-3xl border border-dashed border-line2 text-sm text-muted">Schéma en préparation</div>
-        </div>
-      </section>
-
-      <!-- PROJETS MIS EN AVANT -->
-      <section class="chapter" id="<%= ch.projets.id %>" aria-labelledby="<%= ch.projets.id %>-titre">
-        <div class="reveal"><% chapterHead(ch.projets); %></div>
-        <div class="chapter-visual">
-          <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <% homeProjects.forEach(function (project, i) { %>
-              <li class="reveal" style="transition-delay:<%= i * 0.05 %>s">
-                <a href="/work" class="card card-hover group flex h-full flex-col overflow-hidden">
-                  <span class="block aspect-video overflow-hidden">
-                    <img loading="lazy" src="<%= project.image %>" alt="" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105">
-                  </span>
-                  <span class="flex flex-1 flex-col p-6">
-                    <span class="font-semibold text-strong"><%= project.title %></span>
-                    <span class="mt-1.5 text-sm leading-relaxed text-body"><%= project.description %></span>
-                  </span>
-                </a>
-              </li>
-            <% }); %>
-          </ul>
-          <a href="/work" class="reveal mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-accenth transition-colors hover:text-strong">
-            Tous les projets <span aria-hidden="true">&rarr;</span>
-          </a>
-        </div>
-      </section>
-
-      <!-- COMPÉTENCES -->
-      <section class="chapter" id="<%= ch.competences.id %>" aria-labelledby="<%= ch.competences.id %>-titre">
-        <div class="reveal"><% chapterHead(ch.competences); %></div>
-        <div class="chapter-visual reveal">
-          <div class="card grid gap-px overflow-hidden bg-line sm:grid-cols-2 lg:grid-cols-4">
-            <% skills.forEach(function (group) { %>
-              <div class="bg-surface p-6">
-                <h3 class="text-sm font-semibold text-strong"><%= group.domain %></h3>
-                <ul class="mt-4 space-y-2 text-sm text-body">
-                  <% group.items.forEach(function (item) { %>
-                    <li><%= item %></li>
-                  <% }); %>
-                </ul>
-              </div>
-            <% }); %>
-          </div>
-        </div>
-      </section>
-
+  <!-- HERO -->
+  <section class="reveal" aria-labelledby="hero-titre">
+    <p class="eyebrow">Étudiant en informatique</p>
+    <h1 id="hero-titre" class="mt-5 text-4xl font-semibold leading-[1.05] tracking-tight text-strong sm:text-6xl sm:leading-none">Olivier Dutoit</h1>
+    <p class="mt-6 max-w-xl text-lg text-strong">Construire des infrastructures fiables, automatiser l'ennuyeux, héberger soi-même le reste.</p>
+    <p class="mt-4 max-w-xl text-[15px] leading-relaxed text-body">
+      Actuellement en <strong class="font-medium text-strong">1<sup>re</sup> année de BTS SIO SISR</strong> en alternance,
+      après un <strong class="font-medium text-strong">Bac Pro CIEL</strong> mention Très Bien. Passionné par l'infrastructure IT.
+    </p>
+    <p class="mt-6">
+      <span class="inline-flex items-center gap-2 rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-accenth">
+        <span class="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true"></span>BTS SIO SISR en alternance · Saint-Étienne
+      </span>
+    </p>
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a href="#projets" class="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accenth">Voir mes projets</a>
+      <a href="#contact" class="inline-flex items-center gap-2 rounded-full border border-line px-5 py-2.5 text-sm font-medium text-body transition-colors hover:border-line2 hover:text-strong">Me contacter</a>
     </div>
-  </div>
+  </section>
+
+  <% navChapters.forEach(function (c) { %>
+    <section class="chapter" id="<%= c.id %>" aria-labelledby="<%= c.id %>-titre"<% if (lazyScripts[c.id]) { %> data-lazy-script="<%= lazyScripts[c.id] %>"<% } %>>
+      <div class="reveal">
+        <p class="chapter-num"><%= c.num %></p>
+        <h2 class="chapter-title" id="<%= c.id %>-titre"><%= c.title %></h2>
+        <p class="chapter-text"><%= c.text %></p>
+      </div>
+      <div class="chapter-visual">
+        <%- include('partials/chapters/' + c.id) %>
+      </div>
+    </section>
+  <% }); %>
+
 </div>
 
-<% if (ch.infra) { %>
-<script src="/vendor/gsap/gsap.min.js" defer></script>
-<script src="/vendor/gsap/ScrollTrigger.min.js" defer></script>
-<script src="/js/infra-iso.js" defer></script>
-<% } %>
+<script src="/js/diploma-verify.js" defer></script>
 <script src="/js/chapters.js" defer></script>
 
 <%- include('partials/footer') %>

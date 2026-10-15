@@ -1,14 +1,5 @@
-<%- include('partials/header') %>
-
-<div class="mx-auto max-w-content px-6 py-20 sm:py-24">
-
-  <section class="reveal">
-    <p class="eyebrow">Contact</p>
-    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-strong sm:text-5xl">Me contacter</h1>
-    <p class="mt-4 max-w-2xl text-base text-body">Vous avez un projet ou une opportunité ? Je suis disponible.</p>
-  </section>
-
-  <div class="mt-12 grid gap-10 lg:grid-cols-[1fr_1.4fr]">
+<%# Chapitre Contact : Turnstile chargé à l approche du chapitre %>
+  <div class="grid gap-10 lg:grid-cols-[1fr_1.4fr]">
 
     <!-- COORDONNÉES -->
     <div class="reveal" style="transition-delay:.06s">
@@ -37,11 +28,10 @@
     <div class="reveal" style="transition-delay:.1s">
       <p class="eyebrow">Envoyer un message</p>
 
-      <% if (success) { %>
-        <div class="mt-5 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400"><%= success %></div>
-      <% } %>
-      <% if (error) { %>
-        <div class="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400"><%= error %></div>
+      <% if (contactStatus && contactStatus.type === 'success') { %>
+        <div class="mt-5 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400" role="status"><%= contactStatus.text %></div>
+      <% } else if (contactStatus) { %>
+        <div class="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400" role="alert"><%= contactStatus.text %></div>
       <% } %>
 
       <form action="/contact" method="POST" class="mt-5 flex flex-col gap-4">
@@ -71,8 +61,3 @@
     </div>
 
   </div>
-
-</div>
-
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-<%- include('partials/footer') %>

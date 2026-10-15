@@ -11,7 +11,6 @@
 /* Styles maison : dans un layer pour que les utilitaires gardent la priorité,
    comme avec l'ancien CDN Play (injecté après styles.css). */
 @import "../../public/styles.css" layer(components);
-@import "./infra-iso.css" layer(components);
 
 /* Preflight v4 : les boutons passent en cursor: default, on garde le pointer de la v3 */
 @layer base {
@@ -41,7 +40,6 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --container-content: 64rem;
-  --container-wide:    76rem;   /* accueil : contenu 64rem + colonne d'index */
 }
 
 /* ── Composants partagés : un seul rendu de carte pour tout le site ── */
@@ -57,25 +55,15 @@
   .chapter-text   { @apply mt-3 max-w-2xl text-[15px] leading-relaxed text-body; }
   .chapter-visual { @apply mt-8; }
 
-  /* Index des chapitres (desktop) : trait accent sur le chapitre actif */
-  .chapter-index__link { @apply relative flex gap-3 py-1.5 pl-4 text-xs leading-snug text-muted transition-colors hover:text-body; }
-  .chapter-index__link::before,
-  .chapter-index__link::after {
-    content: '';
-    position: absolute;
-    left: 0; top: .375rem; bottom: .375rem;
-    width: 1px;
-  }
-  .chapter-index__link::before { background: var(--color-line2); }
-  .chapter-index__link::after {
-    background: var(--color-accent);
-    transform: scaleY(0);
-    transition: transform .35s cubic-bezier(.16,1,.3,1);
-  }
-  .chapter-index__link[aria-current="true"] { @apply text-strong; }
-  .chapter-index__link[aria-current="true"]::after { transform: scaleY(1); }
-
-  @media (prefers-reduced-motion: reduce) {
-    .chapter-index__link::after { transition: none; }
+  /* Header = index des chapitres : chapitre actif (aria-current) posé par chapters.js.
+     En mobile la liste défile horizontalement, sans barre visible. */
+  .nav-chapters { scrollbar-width: none; }
+  .nav-chapters::-webkit-scrollbar { display: none; }
+  .nav-link[aria-current="true"] { color: var(--color-strong); }
+  @media (max-width: 47.99rem) {
+    .nav-chapters {
+      mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 24px), transparent);
+      padding: 0 12px;
+    }
   }
 }

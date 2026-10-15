@@ -2,7 +2,7 @@
 
 Bienvenue sur le dépôt de [www.olivier-dutoit.fr](https://www.olivier-dutoit.fr), mon portfolio : mes travaux, mon parcours en BTS SIO SISR, et l'état de mon homelab en direct.
 
-> 🐒 La v5 reprend la v4 ([olivierd.fr-v4](https://github.com/Teksya/olivierd.fr-v4), dont tout l'historique est importé ici) et garde son design : sombre, cartes en grille bento, accent bleu. Elle remplace le CDN Tailwind par un CSS compilé et ajoute des sections animées qui montrent l'infrastructure derrière le site.
+> 🐒 La v5 reprend la v4 ([olivierd.fr-v4](https://github.com/Teksya/olivierd.fr-v4), dont tout l'historique est importé ici) et garde son design : sombre, cartes arrondies, accent bleu. Elle remplace le CDN Tailwind par un CSS compilé et regroupe tout le site sur une seule page, racontée en chapitres.
 
 | Où ? | Quoi ? |
 | --- | --- |
@@ -13,23 +13,20 @@ Bienvenue sur le dépôt de [www.olivier-dutoit.fr](https://www.olivier-dutoit.f
 
 ### 📚 Concept du projet
 
-Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce qui tourne. La page À propos affiche en direct ma musique Spotify, mon statut Discord, mon activité GitHub et l'état des services de mon homelab, relevé sur ma status page.
+Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce qui tourne. Le chapitre « En direct » affiche ma musique Spotify, mon statut Discord, mon activité GitHub et l'état des services de mon homelab, relevé sur ma status page.
 
 ### 🚀 Fonctionnalités
 
-- **Accueil** en chapitres numérotés, avec un index qui suit la lecture en desktop :
-  - **Infrastructure** : les services du homelab en vue isométrique 3D, état et latence en direct (`/api/infra`) ;
-  - **Comment ce site est servi** : le trajet d'une requête (à venir) ;
-  - **Projets mis en avant** : le projet featured puis les suivants de `projects.json` ;
+- **Une seule page** (`/`) en chapitres numérotés. Le header sert d'index : il suit la lecture et met en évidence le chapitre en cours, en desktop comme en mobile.
+  - **Projets** : filtres par technologie, détail dans une fenêtre, données dans `projects.json`.
+  - **Parcours** : frise et vérification du diplôme par QR code.
+  - **En direct** : Spotify (`/api/spotify`, flux `/api/spotify/stream`), Discord via [Lanyard](https://github.com/Phineas/lanyard), GitHub (`/api/github`) et homelab (`/api/uptime`, cache 60 s). Chapitre masqué si tous les widgets sont désactivés.
   - **Compétences**, rangées par domaine.
-- **Travaux** : projets filtrables par catégorie, détail dans une fenêtre, données dans `projects.json`.
-- **À propos** : parcours, diplômes vérifiables par QR code, et la section « En direct » :
-  - Spotify (`/api/spotify`, avec flux en direct sur `/api/spotify/stream`) ;
-  - Discord via [Lanyard](https://github.com/Phineas/lanyard) ;
-  - GitHub (`/api/github`) ;
-  - homelab (`/api/uptime`), lu sur la status page.
-- **Status page** : `/api/uptime` (par groupe) et `/api/infra` (par service) partagent une seule lecture de la status page, en cache 60 s.
-- **Contact** : formulaire protégé par Cloudflare Turnstile, envoi par SMTP (Nodemailer).
+  - **Comment ce site est servi** : le trajet d'une requête (à venir).
+  - **Contact** : formulaire protégé par Cloudflare Turnstile, envoi par SMTP (Nodemailer). Après l'envoi, retour sur `/?contact=<code>#contact` avec le message.
+- **Anciennes adresses** : `/work`, `/about` et `/contact` redirigent (301) vers leur chapitre.
+- **Performance** : le script des widgets et celui de Turnstile ne se chargent qu'à l'approche de leur chapitre (`data-lazy-script`, géré par `public/js/chapters.js`).
+- **Chapitres** : la liste (titres, textes, ordre) est dans `getHomeChapters()` de `server.js`, chaque chapitre a son partial dans `views/partials/chapters/`.
 - **Administration** (`/admin`) protégée par un code d'accès : activation des widgets, réglages de la status page, ajout et tri des projets.
 - **Pages légales** : mentions légales, confidentialité, CGU, et la politique de confidentialité de l'application Budgie.
 - **Accessibilité** : animations coupées avec `prefers-reduced-motion`, focus visible au clavier.
@@ -39,8 +36,8 @@ Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce q
 | Phase | Contenu | État |
 | --- | --- | --- |
 | 1. Socle | Tailwind v4 compilé, GSAP servi en local | ✅ |
-| 2. Accueil | Chapitres, index sticky, cartes harmonisées sur toutes les pages | ✅ |
-| 3. Infrastructure | Vue isométrique 3D des services du homelab | ✅ |
+| 2. Une seule page | Tout le site en chapitres, header en index, redirections des anciennes pages | ✅ |
+| 3. Hero homelab | Scène pixel art (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) avec les vrais états du homelab | ⏳ |
 | 4. Ce site | Le trajet d'une requête, du visiteur au container Express | ⏳ |
 
 ## 🛠️ Lancer en local
@@ -104,33 +101,24 @@ npm start
 
 > 🟢 Le vert `#22c55e` veut dire « en ligne » partout sur le site. Les verts et rouges de Tailwind v3 sont repris tels quels dans `@theme`, la v4 les ayant changés.
 
-## 🖥️ Chapitre Infrastructure
-
-Chaque container de la scène est un monitor de la status page Uptime Kuma (adresse et page réglées dans `/admin`).
-
-- **Ajouter un service** : ajoute le monitor dans Uptime Kuma, puis place-le dans un groupe de la status page publique. Il apparaît sur l'accueil en deux minutes au plus (cache serveur de 60 s, puis rafraîchissement de la page toutes les 60 s), sous le nom affiché par la status page. L'ordre suit celui des groupes et des monitors.
-- **Ce qui sort du serveur** : `/api/infra` ne renvoie que `name`, `group`, `up` et `latency` (en ms, `null` si le monitor n'en mesure pas). Ni id, ni URL, ni hostname, ni message d'erreur.
-- **État** : seul le statut 1 d'Uptime Kuma compte comme en ligne ; « pending » et « maintenance » s'affichent hors ligne, comme dans `/api/uptime`.
-- **Sans JS, en mobile et pour les lecteurs d'écran** : la liste rendue par le serveur dans `views/partials/infra-iso.ejs`. La scène 3D (`public/js/infra-iso.js`, `src/css/infra-iso.css`) est décorative.
-
 ## 🗂️ Structure du projet
 
 ```text
 .
 ├── server.js             Le serveur Express : pages, API, admin
 ├── manage-projects.js    Gestion des projets en ligne de commande
-├── projects.json         Les projets affichés sur /work
-├── src/css/
-│   ├── app.css           Source Tailwind (tokens dans @theme, composants)
-│   └── infra-iso.css     Scène isométrique du chapitre Infrastructure
+├── projects.json         Les projets du chapitre Projets
+├── src/css/app.css       Source Tailwind (tokens dans @theme, composants)
 ├── public/
 │   ├── css/app.css       CSS compilé (commité)
 │   ├── styles.css        Styles maison, importés dans app.css
 │   ├── admin.css         Styles de l'administration
-│   └── js/               Scripts des pages (about.js, effects.js...)
+│   └── js/               Scripts (chapters.js, effects.js, about.js...)
 └── views/
-    ├── partials/         header, footer, barre latérale de l'admin
-    └── *.ejs             Une vue par page
+    ├── index.ejs         La page unique : hero puis chapitres
+    ├── partials/         header (index des chapitres), footer, admin
+    │   └── chapters/     Un partial par chapitre (projets, parcours, en-direct...)
+    └── *.ejs             Pages légales, erreurs, admin
 ```
 
 ## 📜 Licence
