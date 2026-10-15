@@ -1,2 +1,63 @@
-<%# Chapitre Ce site : schéma du trajet d'une requête, en attente du contenu validé des étapes %>
-<div class="reveal flex min-h-64 items-center justify-center rounded-3xl border border-dashed border-line2 text-sm text-muted">Schéma en préparation</div>
+<%#
+  Chapitre « Comment ce site est servi » : le trajet d'une requête, étape par étape.
+  Animation (chemin tracé au scroll, paquet lumineux, étapes qui passent au vert) : public/js/request-flow.js.
+  Sans JS ou en mouvement réduit : toutes les étapes sont affichées, validées.
+  Le vert est réservé à cette section.
+
+  Les contrôles marqués « verifie: false » sont rédigés de façon générique, sans relevé de la configuration
+  réelle (Cloudflare, reverse proxy) : à confirmer ou corriger. Les autres se vérifient dans le code du site.
+%>
+<%
+  const steps = [
+    { titre: 'Votre navigateur', role: 'Demande la page.', controles: [
+      { texte: 'Connexion chiffrée en HTTPS', verifie: false },
+      { texte: 'Aucun traceur publicitaire ni outil de mesure d\'audience', verifie: true },
+      { texte: 'Animations coupées si vous avez demandé moins de mouvement', verifie: true }
+    ] },
+    { titre: 'Cloudflare', role: 'Reçoit la requête en premier, devant mon serveur.', controles: [
+      { texte: 'Certificat TLS et chiffrement jusqu\'à mon serveur', verifie: false },
+      { texte: 'Absorbe les attaques par saturation avant qu\'elles n\'arrivent chez moi', verifie: false },
+      { texte: 'Anti-robot Turnstile sur le formulaire de contact', verifie: true }
+    ] },
+    { titre: 'Reverse proxy', role: 'Seule porte d\'entrée du serveur.', controles: [
+      { texte: 'Redirige tout le trafic HTTP vers HTTPS', verifie: false },
+      { texte: 'Transmet la requête au bon container, rien d\'autre n\'est exposé', verifie: false }
+    ] },
+    { titre: 'Container Express', role: 'Le site lui-même : Node.js, Express et EJS.', controles: [
+      { texte: 'Session admin signée (HMAC), cookie HttpOnly et SameSite', verifie: true },
+      { texte: 'API publiques en liste blanche : ni IP, ni hostname, ni URL interne', verifie: true },
+      { texte: 'Formulaire vérifié côté serveur, contenu échappé avant l\'envoi', verifie: true }
+    ] },
+    { titre: 'La réponse', role: 'Revient par le même chemin, jusqu\'à vous.', controles: [
+      { texte: 'Page rendue par le serveur, lisible même sans JavaScript', verifie: true },
+      { texte: 'Fichiers versionnés, mis en cache 30 jours par votre navigateur', verifie: true },
+      { texte: 'Scène animée chargée seulement si votre machine suit', verifie: true }
+    ] }
+  ];
+  const check = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+%>
+<div class="flow reveal" data-flow>
+  <svg class="flow__path" data-flow-path aria-hidden="true" focusable="false">
+    <path class="flow__track" data-flow-track d=""/>
+    <path class="flow__trace" data-flow-trace d=""/>
+  </svg>
+  <span class="flow__packet" data-flow-packet aria-hidden="true"></span>
+
+  <ol class="flow__steps">
+    <% steps.forEach(function (s, i) { %>
+      <li class="flow__step" data-flow-step>
+        <span class="flow__node" data-flow-node aria-hidden="true"><%- check %></span>
+        <div class="flow__card card">
+          <p class="font-mono text-xs text-muted"><%= String(i + 1).padStart(2, '0') %></p>
+          <h3 class="mt-1 text-base font-semibold text-strong"><%= s.titre %></h3>
+          <p class="mt-1 text-sm text-body"><%= s.role %></p>
+          <ul class="mt-3 space-y-1.5">
+            <% s.controles.forEach(function (c) { %>
+              <li class="flow__check"><span class="flow__tick" aria-hidden="true"><%- check %></span><%= c.texte %></li>
+            <% }); %>
+          </ul>
+        </div>
+      </li>
+    <% }); %>
+  </ol>
+</div>

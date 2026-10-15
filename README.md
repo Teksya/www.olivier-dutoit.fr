@@ -22,7 +22,7 @@ Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce q
   - **Parcours** : frise et vérification du diplôme par QR code.
   - **En direct** : Spotify (`/api/spotify`, flux `/api/spotify/stream`), Discord via [Lanyard](https://github.com/Phineas/lanyard), GitHub (`/api/github`) et homelab (`/api/uptime`, cache 60 s). Chapitre masqué si tous les widgets sont désactivés.
   - **Compétences**, rangées par domaine.
-  - **Comment ce site est servi** : le trajet d'une requête (à venir).
+  - **Comment ce site est servi** : le trajet d'une requête (votre navigateur, Cloudflare, reverse proxy, container Express, réponse), avec les contrôles de chaque étape. Un chemin se trace au défilement, un paquet lumineux le parcourt et chaque étape franchie passe au vert (`public/js/request-flow.js`, `src/css/request-flow.css`). Les étapes et leurs contrôles sont en tête de `views/partials/chapters/ce-site.ejs` ; ceux marqués `verifie: false` sont génériques, à confirmer avec la configuration réelle.
   - **Contact** : formulaire protégé par Cloudflare Turnstile, envoi par SMTP (Nodemailer). Après l'envoi, retour sur `/?contact=<code>#contact` avec le message.
 - **Anciennes adresses** : `/work`, `/about` et `/contact` redirigent (301) vers leur chapitre.
 - **Performance** : le script des widgets et celui de Turnstile ne se chargent qu'à l'approche de leur chapitre (`data-lazy-script`, géré par `public/js/chapters.js`).
@@ -38,7 +38,7 @@ Un portfolio qui ne se contente pas de lister des projets : il montre aussi ce q
 | 1. Socle | Tailwind v4 compilé, GSAP servi en local | ✅ |
 | 2. Une seule page | Tout le site en chapitres, header en index, redirections des anciennes pages | ✅ |
 | 3. Hero homelab | Scène pixel art en hero (moteur [cat-abw-iso3d-webanim](https://github.com/Teksya/cat-abw-iso3d-webanim)) : intégration, vraies données, interactions, Blue grandit, finitions | ✅ |
-| 4. Ce site | Le trajet d'une requête, du visiteur au container Express | ⏳ |
+| 4. Ce site | Le trajet d'une requête, du visiteur au container Express | ✅ (contrôles Cloudflare et proxy à confirmer) |
 
 ## 🛠️ Lancer en local
 

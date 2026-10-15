@@ -1,0 +1,140 @@
+/* ═══════════════════════════════════════════════════
+   Chapitre « Comment ce site est servi » : trajet d'une requête
+   Animation pilotée par public/js/request-flow.js (classe .is-live).
+   Sans JS ou en mouvement réduit : toutes les étapes affichées, validées.
+   Le vert (#22c55e) reste dans cette section : chaque contrôle passé.
+   ═══════════════════════════════════════════════════ */
+
+@property --flow-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.flow {
+  --flow-green: #22c55e;
+  --flow-col: 2.5rem;              /* colonne du chemin et des nœuds */
+  position: relative;
+}
+
+.flow__steps { position: relative; display: grid; gap: 1rem; }
+@media (min-width: 40rem) { .flow__steps { gap: 1.25rem; } }
+
+/* Ligne fixe (sans JS) : remplacée par le chemin SVG quand l'animation tourne */
+.flow__steps::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--flow-col) / 2 - 1px);
+  top: 1.9rem; bottom: 1.9rem;
+  width: 2px;
+  background: rgba(34,197,94,.45);
+}
+.flow.is-live .flow__steps::before { display: none; }
+
+.flow__step {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--flow-col) minmax(0, 1fr);
+  align-items: start;
+}
+
+/* Nœud : pastille verte avec un check une fois l'étape franchie */
+.flow__node {
+  position: relative;
+  z-index: 1;
+  justify-self: center;
+  margin-top: 1.25rem;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: var(--color-surface2);
+  border: 1px solid var(--color-line2);
+  color: #052e14;
+}
+.flow__node::before {
+  content: '';
+  position: absolute; inset: -1px;
+  border-radius: inherit;
+  background: var(--flow-green);
+  transition: opacity .35s ease, transform .35s cubic-bezier(.16,1,.3,1);
+}
+.flow__node svg { position: relative; transition: opacity .35s ease; }
+
+.flow__card { grid-column: 2; padding: 1.25rem; }
+@media (min-width: 40rem) { .flow__card { padding: 1.5rem; } }
+.flow__step.is-done .flow__card { border-color: rgba(34,197,94,.22); }
+
+.flow__check { display: flex; gap: .55rem; font-size: .875rem; line-height: 1.45; color: var(--color-body); }
+.flow__tick {
+  flex: none;
+  width: 18px; height: 18px; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  color: var(--flow-green);
+  background: rgba(34,197,94,.12);
+  transition: opacity .35s ease;
+}
+
+/* Étapes pas encore franchies (animation en cours) */
+.flow.is-live .flow__step:not(.is-done) .flow__node::before { opacity: 0; transform: scale(.5); }
+.flow.is-live .flow__step:not(.is-done) .flow__node svg { opacity: 0; }
+.flow.is-live .flow__step:not(.is-done) .flow__tick { opacity: .3; }
+
+/* Étape active : bordure en dégradé conique qui tourne, halo vert */
+.flow__step.is-active .flow__card {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+    conic-gradient(from var(--flow-angle), rgba(34,197,94,0) 0deg, rgba(34,197,94,.95) 70deg, rgba(34,197,94,0) 140deg, rgba(34,197,94,0) 360deg) border-box;
+  filter: drop-shadow(0 0 14px rgba(34,197,94,.22));
+  animation: flow-spin 4s linear infinite;
+}
+.flow__step.is-active .flow__node { filter: drop-shadow(0 0 8px rgba(34,197,94,.7)); }
+@keyframes flow-spin { to { --flow-angle: 360deg; } }
+
+/* Chemin SVG tracé au scroll, et paquet lumineux qui le parcourt */
+.flow__path {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  display: none;
+}
+.flow.is-live .flow__path { display: block; }
+.flow__track { fill: none; stroke: var(--color-line2); stroke-width: 2; }
+.flow__trace {
+  fill: none;
+  stroke: var(--flow-green);
+  stroke-width: 2;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px rgba(34,197,94,.7));
+}
+
+.flow__packet {
+  position: absolute; left: 0; top: 0; z-index: 2;
+  width: 12px; height: 12px;
+  border-radius: 999px;
+  background: #bbf7d0;
+  box-shadow: 0 0 10px 3px rgba(34,197,94,.65);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+.flow.is-live .flow__packet { opacity: 1; }
+.flow__packet::after {
+  content: '';
+  position: absolute; inset: -6px;
+  border-radius: inherit;
+  border: 1px solid rgba(34,197,94,.7);
+  animation: flow-pulse 1.6s ease-out infinite;
+}
+@keyframes flow-pulse { from { transform: scale(.6); opacity: .9; } to { transform: scale(1.6); opacity: 0; } }
+
+/* Hors écran : animations en pause */
+.flow:not(.is-visible) .flow__card,
+.flow:not(.is-visible) .flow__packet::after { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flow__node::before, .flow__node svg, .flow__tick { transition: none; }
+  .flow__step.is-active .flow__card, .flow__packet::after { animation: none; }
+}
